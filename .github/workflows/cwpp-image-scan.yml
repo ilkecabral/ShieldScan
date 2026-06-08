@@ -1,0 +1,52 @@
+﻿name: CWPP - Container Image Scan
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t shieldscan:${{ github.sha }} .
+
+      - name: Trivy vulnerability scan (SARIF)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: shieldscan:${{ github.sha }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          vuln-type: os,library
+
+      - name: Upload SARIF to Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+
+      - name: Trivy table output
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: shieldscan:${{ github.sha }}
+          format: table
+          severity: CRITICAL,HIGH,MEDIUM
+          ignore-unfixed: true
+
+      - name: Fail on CRITICAL
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: shieldscan:${{ github.sha }}
+          exit-code: '1'
+          severity: CRITICAL
+          ignore-unfixed: true

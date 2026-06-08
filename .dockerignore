@@ -1,0 +1,14 @@
+﻿.git
+.github
+.gitignore
+.env
+.env.*
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.vscode/
+.idea/
+*.md
+trivy.yaml
