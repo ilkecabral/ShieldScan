@@ -1,0 +1,26 @@
+# Web framework
+fastapi==0.111.0
+uvicorn==0.29.0
+
+# Database
+sqlalchemy==2.0.30
+
+# Auth
+passlib[bcrypt]==1.7.4
+python-jose[cryptography]==3.3.0
+
+# AWS credential encryption
+cryptography==42.0.8
+
+# Environment variables
+python-dotenv==1.0.1
+
+# AI / LLM
+ollama==0.3.3
+
+# RAG
+chromadb==0.5.0
+
+# Data validation
+pydantic==2.7.1
+email-validator==2.1.1
