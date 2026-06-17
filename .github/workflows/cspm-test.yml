@@ -1,0 +1,24 @@
+name: CSPM - Test (Prowler Dry Run)
+on:
+  push:
+    branches: [feature/cspm-test, feature/cspm]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  prowler-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pull Prowler Docker image
+        run: docker pull toniblyx/prowler:latest
+      - name: Verify Prowler runs
+        run: docker run --rm toniblyx/prowler:latest --version
+      - name: List available AWS checks
+        run: docker run --rm toniblyx/prowler:latest aws --list-checks | head -50
+      - name: List available compliance frameworks
+        run: docker run --rm toniblyx/prowler:latest aws --list-compliance | head -30
+      - name: Dry run summary
+        run: |
+          echo "✓ Prowler is functional on GitHub Actions runner"
+          echo "✓ Ready to scan a real AWS account once OIDC is configured"
