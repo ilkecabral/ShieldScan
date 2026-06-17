@@ -1,0 +1,2127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ShieldScan - Cloud Security CNAPP Dashboard</title>
+  <!-- React 18 & Babel Standalone CDNs -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Font and Styling -->
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  
+  <!-- Tailwind Theme Customizations -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              DEFAULT: '#0F6E56',
+              hover: '#094f3d',
+              light: '#f0fbf8',
+              border: '#e6f4f0',
+            }
+          },
+          fontFamily: {
+            sans: ['DM Sans', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+  
+  <style>
+    * { font-family: 'DM Sans', sans-serif; box-sizing: border-box; }
+    
+    /* Modern Custom Scrollbar following modern-web-guidance */
+    .scrollbar {
+      --scrollbar-thumb: #0F6E56;
+      --scrollbar-track: rgba(15, 110, 86, 0.08);
+      scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+      scrollbar-width: thin;
+    }
+    @supports not (scrollbar-color: auto) {
+      .scrollbar::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      .scrollbar::-webkit-scrollbar-thumb {
+        background: var(--scrollbar-thumb);
+        border-radius: 10px;
+      }
+      .scrollbar::-webkit-scrollbar-track {
+        background: var(--scrollbar-track);
+      }
+    }
+    
+    pre { font-family: 'DM Sans', sans-serif; }
+    
+    /* Glassmorphism styling */
+    .glass-card {
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(229, 231, 235, 0.5);
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-700 min-h-screen">
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+const API = "http://localhost:8000";
+
+// ── MOCK DATA FALLBACK ────────────────────────────────────────────────────────
+const MOCK_FINDINGS = [
+  {
+    id: "CSPM-001",
+    finding_id: "CSPM-001",
+    resource: "arn:aws:s3:::shieldscan-prod-logs",
+    resource_type: "S3 Bucket",
+    finding: "S3 public bucket is publicly accessible",
+    title: "S3 public bucket is publicly accessible",
+    severity: "CRITICAL",
+    service: "CSPM",
+    finding_type: "CSPM",
+    region: "us-east-1",
+    risk_score: 95,
+    remediation: "Enable S3 Block Public Access on the bucket. Go to AWS S3 Console → Bucket → Permissions → Block public access.",
+    cis_control: "CIS AWS 2.1.1",
+    is_resolved: false
+  },
+  {
+    id: "CSPM-002",
+    finding_id: "CSPM-002",
+    resource: "arn:aws:iam::123456789012:root",
+    resource_type: "IAM",
+    finding: "IAM root access key is active",
+    title: "IAM root access key is active",
+    severity: "CRITICAL",
+    service: "CSPM",
+    finding_type: "CSPM",
+    region: "global",
+    risk_score: 92,
+    remediation: "Delete root access keys immediately from AWS IAM Console → Security credentials. Use IAM roles or IAM users with MFA and least privilege.",
+    cis_control: "CIS AWS 1.4",
+    is_resolved: false
+  },
+  {
+    id: "CSPM-003",
+    finding_id: "CSPM-003",
+    resource: "sg-0a1b2c3d4e (web-prod)",
+    resource_type: "Security Group",
+    finding: "SSH port 22 open to 0.0.0.0/0",
+    title: "SSH port 22 open to 0.0.0.0/0",
+    severity: "HIGH",
+    service: "CSPM",
+    finding_type: "CSPM",
+    region: "us-east-1",
+    risk_score: 78,
+    remediation: "Edit security group sg-0a1b2c3d4e and restrict inbound access on port 22 to specific authorized IP ranges or use Session Manager.",
+    cis_control: "CIS AWS 5.2",
+    is_resolved: false
+  },
+  {
+    id: "CSPM-004",
+    finding_id: "CSPM-004",
+    resource: "rds-prod-mysql-01",
+    resource_type: "RDS Instance",
+    finding: "RDS database is publicly accessible",
+    title: "RDS database is publicly accessible",
+    severity: "HIGH",
+    service: "CSPM",
+    finding_type: "CSPM",
+    region: "eu-west-1",
+    risk_score: 74,
+    remediation: "Modify rds-prod-mysql-01 and disable Publicly Accessible parameter. Place it inside a private subnet group.",
+    cis_control: "CIS AWS 2.3.2",
+    is_resolved: false
+  },
+  {
+    id: "CSPM-005",
+    finding_id: "CSPM-005",
+    resource: "CloudTrail (us-east-1)",
+    resource_type: "CloudTrail",
+    finding: "CloudTrail logging disabled",
+    title: "CloudTrail logging disabled",
+    severity: "HIGH",
+    service: "CSPM",
+    finding_type: "CSPM",
+    region: "us-east-1",
+    risk_score: 70,
+    remediation: "Create or modify us-east-1 trail, ensure it is enabled in all regions and log validation is active.",
+    cis_control: "CIS AWS 3.1",
+    is_resolved: false
+  },
+  {
+    id: "CVE-2023-44487",
+    finding_id: "CVE-2023-44487",
+    resource: "nginx:1.21",
+    resource_type: "Container Image",
+    finding: "CVE-2023-44487 (HTTP/2 Rapid Reset Attack) in nginx",
+    title: "CVE-2023-44487 (HTTP/2 Rapid Reset Attack) in nginx",
+    severity: "HIGH",
+    service: "CWPP",
+    finding_type: "CWPP",
+    region: "container",
+    risk_score: 76,
+    remediation: "Upgrade base image to nginx:1.25.3 or later in your Dockerfile.",
+    cis_control: "Trivy CVE",
+    cve_id: "CVE-2023-44487",
+    cvss_score: 7.5,
+    affected_package: "nginx:1.21.0",
+    fixed_version: "1.25.3",
+    is_resolved: false
+  },
+  {
+    id: "CSPM-006",
+    finding_id: "CSPM-006",
+    resource: "arn:aws:s3:::shieldscan-backups",
+    resource_type: "S3 Bucket",
+    finding: "S3 versioning disabled",
+    title: "S3 versioning disabled",
+    severity: "MEDIUM",
+    service: "CSPM",
+    finding_type: "CSPM",
+    region: "us-east-1",
+    risk_score: 45,
+    remediation: "Enable S3 versioning via AWS Console or CLI for bucket shieldscan-backups to protect against unintended data modifications.",
+    cis_control: "CIS AWS 2.1.3",
+    is_resolved: false
+  },
+  {
+    id: "CSPM-007",
+    finding_id: "CSPM-007",
+    resource: "i-0a1b2c3d4e5f (webapp-01)",
+    resource_type: "EC2 Instance",
+    finding: "EC2 instance allows IMDSv1",
+    title: "EC2 instance allows IMDSv1",
+    severity: "MEDIUM",
+    service: "CSPM",
+    finding_type: "CSPM",
+    region: "us-east-1",
+    risk_score: 42,
+    remediation: "Require IMDSv2 usage on the EC2 instance by configuring HttpTokens to 'required'.",
+    cis_control: "CIS AWS 5.6",
+    is_resolved: false
+  },
+  {
+    id: "CVE-2023-40217",
+    finding_id: "CVE-2023-40217",
+    resource: "python:3.9-slim",
+    resource_type: "Container Image",
+    finding: "CVE-2023-40217 (ssl module bypass) in python",
+    title: "CVE-2023-40217 (ssl module bypass) in python",
+    severity: "MEDIUM",
+    service: "CWPP",
+    finding_type: "CWPP",
+    region: "container",
+    risk_score: 40,
+    remediation: "Upgrade python base container image to python:3.11-slim or python:3.12-slim.",
+    cis_control: "Trivy CVE",
+    cve_id: "CVE-2023-40217",
+    cvss_score: 5.3,
+    affected_package: "python:3.9-slim",
+    fixed_version: "3.11-slim",
+    is_resolved: false
+  }
+];
+
+const MOCK_STATS = {
+  risk_score: 68,
+  total: 9,
+  critical: 2,
+  high: 4,
+  medium: 3,
+  low: 0
+};
+
+const CIS_CONTROLS = [
+  { section: "1", id: "1.4", title: "No root account access key exists", status: "FAIL", fid: "CSPM-002" },
+  { section: "1", id: "1.5", title: "MFA enabled for root account", status: "UNKNOWN", fid: null },
+  { section: "1", id: "1.8", title: "Minimum password length >= 14 characters", status: "PASS", fid: null },
+  { section: "1", id: "1.9", title: "Password reuse prevention (24 passwords)", status: "PASS", fid: null },
+  { section: "1", id: "1.10", title: "MFA enabled for all console IAM users", status: "UNKNOWN", fid: null },
+  { section: "1", id: "1.14", title: "Access keys rotated within 90 days", status: "UNKNOWN", fid: null },
+  { section: "1", id: "1.16", title: "IAM policies attached only to groups/roles", status: "PASS", fid: null },
+  { section: "2", id: "2.1.1", title: "S3 Block Public Access enabled (bucket level)", status: "FAIL", fid: "CSPM-001" },
+  { section: "2", id: "2.1.2", title: "S3 MFA Delete enabled", status: "UNKNOWN", fid: null },
+  { section: "2", id: "2.1.3", title: "S3 versioning enabled", status: "FAIL", fid: "CSPM-006" },
+  { section: "2", id: "2.3.1", title: "RDS storage encryption enabled", status: "PASS", fid: null },
+  { section: "2", id: "2.3.2", title: "RDS not publicly accessible", status: "FAIL", fid: "CSPM-004" },
+  { section: "2", id: "2.3.3", title: "RDS automated backups enabled", status: "PASS", fid: null },
+  { section: "3", id: "3.1", title: "CloudTrail enabled in all regions", status: "FAIL", fid: "CSPM-005" },
+  { section: "3", id: "3.2", title: "CloudTrail log file validation enabled", status: "UNKNOWN", fid: null },
+  { section: "3", id: "3.3", title: "CloudTrail S3 bucket not publicly accessible", status: "PASS", fid: null },
+  { section: "3", id: "3.7", title: "CloudTrail logs encrypted at rest (KMS)", status: "UNKNOWN", fid: null },
+  { section: "4", id: "4.1", title: "Unauthorized API calls alarm exists", status: "UNKNOWN", fid: null },
+  { section: "4", id: "4.3", title: "Root account usage alarm exists", status: "UNKNOWN", fid: null },
+  { section: "4", id: "4.15", title: "AWS Organizations changes alarm", status: "UNKNOWN", fid: null },
+  { section: "5", id: "5.1", title: "No network ACLs allow ingress 0.0.0.0/0", status: "PASS", fid: null },
+  { section: "5", id: "5.2", title: "No security groups allow SSH from 0.0.0.0/0", status: "FAIL", fid: "CSPM-003" },
+  { section: "5", id: "5.3", title: "No security groups allow RDP from 0.0.0.0/0", status: "PASS", fid: null },
+  { section: "5", id: "5.4", title: "VPC default security group restricts all traffic", status: "PASS", fid: null },
+  { section: "5", id: "5.6", title: "EC2 instances require IMDSv2", status: "FAIL", fid: "CSPM-007" },
+];
+
+const CIS_SECTIONS = {
+  "1": "Identity & Access Management",
+  "2": "Storage",
+  "3": "Logging",
+  "4": "Monitoring",
+  "5": "Networking",
+};
+
+const INVENTORY = [
+  { id: "INV-01", type: "S3 Bucket", name: "shieldscan-prod-logs", region: "us-east-1", risk: "Critical", findings: 1 },
+  { id: "INV-02", type: "S3 Bucket", name: "shieldscan-backups", region: "us-east-1", risk: "At Risk", findings: 1 },
+  { id: "INV-03", type: "IAM User", name: "root account access key", region: "global", risk: "Critical", findings: 1 },
+  { id: "INV-04", type: "Security Group", name: "sg-0a1b2c3d4e (web-prod)", region: "us-east-1", risk: "At Risk", findings: 1 },
+  { id: "INV-05", type: "RDS Instance", name: "rds-prod-mysql-01", region: "eu-west-1", risk: "At Risk", findings: 1 },
+  { id: "INV-06", type: "EC2 Instance", name: "i-0a1b2c3d4e5f (webapp-01)", region: "us-east-1", risk: "At Risk", findings: 1 },
+  { id: "INV-07", type: "CloudTrail", name: "us-east-1 trail", region: "us-east-1", risk: "At Risk", findings: 1 },
+  { id: "INV-08", type: "EC2 Instance", name: "nginx:1.21", region: "container", risk: "At Risk", findings: 1 },
+  { id: "INV-09", type: "EC2 Instance", name: "python:3.9-slim", region: "container", risk: "At Risk", findings: 1 },
+  { id: "INV-10", type: "VPC", name: "vpc-0main-prod", region: "us-east-1", risk: "Active", findings: 0 },
+  { id: "INV-11", type: "Lambda", name: "shieldscan-processor", region: "us-east-1", risk: "Active", findings: 0 },
+  { id: "INV-12", type: "KMS Key", name: "key-prod-main", region: "us-east-1", risk: "Active", findings: 0 }
+];
+
+// Helper colors
+function getRiskColor(score) {
+  if (score >= 70) return "#dc2626"; // red
+  if (score >= 40) return "#ea580c"; // orange
+  return "#16a34a"; // green
+}
+
+const SEV_COLORS = {
+  CRITICAL: "bg-red-100 text-red-800 border-red-200",
+  HIGH: "bg-orange-100 text-orange-800 border-orange-200",
+  MEDIUM: "bg-amber-100 text-amber-800 border-amber-200",
+  LOW: "bg-blue-100 text-blue-800 border-blue-200"
+};
+
+// ── API Fetch Helper with 401 handling ────────────────────────────────────────
+const apiFetch = async (path, options = {}, token = null) => {
+  const headers = {
+    "Content-Type": "application/json",
+    ...(options.headers || {})
+  };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  
+  const response = await fetch(`${API}${path}`, {
+    ...options,
+    headers
+  });
+  
+  if (response.status === 401) {
+    throw new Error("UNAUTHORIZED");
+  }
+  
+  if (!response.ok) {
+    const errText = await response.text();
+    let detail = "Request failed";
+    try {
+      const errJson = JSON.parse(errText);
+      detail = errJson.detail || detail;
+    } catch(e) {}
+    throw new Error(detail);
+  }
+  
+  if (response.status === 204) return null;
+  return response.json();
+};
+
+// ── ATOMS / COMMON COMPONENTS ────────────────────────────────────────────────
+const Badge = ({ s }) => (
+  <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold border ${SEV_COLORS[s] || "bg-gray-100 text-gray-700 border-gray-200"}`}>{s}</span>
+);
+
+const TypeBadge = ({ t }) => {
+  const cfg = t === "CSPM" ? "bg-teal-50 text-teal-700 border-teal-200" : "bg-indigo-50 text-indigo-700 border-indigo-200";
+  return <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium border ${cfg}`}>{t}</span>;
+};
+
+const Spinner = ({ sz = 5, white = false }) => (
+  <svg className={`animate-spin h-${sz} w-${sz} ${white ? 'text-white' : 'text-brand'}`} viewBox="0 0 24 24" fill="none">
+    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity=".25"/>
+    <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
+  </svg>
+);
+
+const Toast = ({ message, type, onClose }) => {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 4000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <div className="fixed bottom-6 left-6 z-[100] flex items-center gap-3 bg-red-600 text-white px-4 py-3 rounded-lg shadow-xl border border-red-500 animate-bounce">
+      <span className="font-semibold text-sm">{message}</span>
+      <button onClick={onClose} className="text-white hover:text-red-200 text-lg leading-none font-bold">&times;</button>
+    </div>
+  );
+};
+
+const RiskGauge = ({ score }) => {
+  const color = getRiskColor(score);
+  const strokeDash = `${score} ${100 - score}`;
+  
+  return (
+    <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 flex flex-col items-center justify-center min-w-[140px]">
+      <p className="text-[11px] text-slate-400 uppercase tracking-wider font-semibold mb-2">Risk Score</p>
+      <div className="relative w-16 h-16">
+        <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
+          <circle cx="18" cy="18" r="15.9" fill="none" stroke="#f1f5f9" strokeWidth="4.5"/>
+          <circle cx="18" cy="18" r="15.9" fill="none" stroke={color} strokeWidth="4.5"
+            strokeDasharray={strokeDash} strokeLinecap="round"/>
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-base font-bold leading-none" style={{color}}>{score}</span>
+          <span className="text-[9px] text-slate-400 font-semibold mt-0.5">/100</span>
+        </div>
+      </div>
+      <p className="text-xs font-bold mt-2" style={{color}}>
+        {score >= 70 ? "Critical Posture" : score >= 40 ? "High Posture" : "Secured Posture"}
+      </p>
+    </div>
+  );
+};
+
+const StatCard = ({ label, value, color, sub, icon }) => (
+  <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 flex flex-col justify-between min-h-[105px]">
+    <div className="flex items-center justify-between">
+      <p className="text-[11px] text-slate-400 uppercase tracking-wider font-semibold">{label}</p>
+      {icon && <span className="text-slate-400 text-base">{icon}</span>}
+    </div>
+    <div className="mt-2">
+      <p className={`text-3xl font-extrabold leading-none ${color}`}>{value}</p>
+      {sub && <p className="text-[11px] text-slate-400 font-medium mt-1.5">{sub}</p>}
+    </div>
+  </div>
+);
+
+// ── AUTHENTICATION PAGES ─────────────────────────────────────────────────────
+function LoginPage({ onLogin, onGoSignup, showToast }) {
+  const [email, setEmail] = useState("");
+  const [pwd, setPwd] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!email || !pwd) { showToast("Please fill in all fields."); return; }
+    setLoading(true);
+    try {
+      const data = await apiFetch("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password: pwd })
+      });
+      onLogin(data.access_token);
+    } catch(err) {
+      showToast(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Dark backdrop visuals */}
+      <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] rounded-full bg-brand/10 blur-[120px]"></div>
+      <div className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] rounded-full bg-emerald-700/5 blur-[120px]"></div>
+      
+      <div className="w-full max-w-md relative z-10">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-brand/10 text-brand rounded-2xl border border-brand/20 shadow-inner mb-4">
+            <svg className="w-9 h-9" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/>
+            </svg>
+          </div>
+          <h1 className="text-3xl font-extrabold text-white tracking-tight">ShieldScan</h1>
+          <p className="text-slate-400 mt-2 text-sm font-medium">Cloud-Native Application Protection Platform</p>
+        </div>
+        
+        <div className="bg-white rounded-2xl border border-slate-200/50 shadow-2xl p-8">
+          <h2 className="text-lg font-bold text-slate-800 mb-6">Sign in to your account</h2>
+          <form onSubmit={submit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Email</label>
+              <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com"
+                className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-brand focus:bg-white focus:ring-4 focus:ring-brand/5 transition-all"/>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Password</label>
+              <input type="password" value={pwd} onChange={e=>setPwd(e.target.value)} placeholder="••••••••"
+                className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-brand focus:bg-white focus:ring-4 focus:ring-brand/5 transition-all"/>
+            </div>
+            <button type="submit" disabled={loading}
+              className="w-full mt-2 py-3 bg-brand text-white text-sm font-bold rounded-xl hover:bg-brand-hover disabled:opacity-60 transition-all shadow-md flex items-center justify-center gap-2">
+              {loading && <Spinner sz={4} white={true}/>}
+              {loading ? "Signing in..." : "Sign in"}
+            </button>
+          </form>
+          
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div>
+            <div className="relative flex justify-center"><span className="px-3 bg-white text-xs font-medium text-slate-400 uppercase tracking-widest">or</span></div>
+          </div>
+          
+          <p className="text-center text-xs text-slate-400">
+            Don't have an account?{" "}
+            <button onClick={onGoSignup} className="text-brand font-bold hover:underline">Create account</button>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SignupPage({ onSignup, onGoLogin, showToast }) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [pwd, setPwd] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!name || !email || !pwd) { showToast("Please fill in all required fields."); return; }
+    if (pwd.length < 8) { showToast("Password must be at least 8 characters."); return; }
+    setLoading(true);
+    try {
+      const data = await apiFetch("/api/auth/register", {
+        method: "POST",
+        body: JSON.stringify({ email, password: pwd, full_name: name })
+      });
+      onSignup(data.access_token);
+    } catch(err) {
+      showToast(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 relative overflow-hidden">
+      <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] rounded-full bg-brand/10 blur-[120px]"></div>
+      <div className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] rounded-full bg-emerald-700/5 blur-[120px]"></div>
+      
+      <div className="w-full max-w-md relative z-10">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-brand/10 text-brand rounded-2xl border border-brand/20 shadow-inner mb-4">
+            <svg className="w-9 h-9" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/>
+            </svg>
+          </div>
+          <h1 className="text-3xl font-extrabold text-white tracking-tight">ShieldScan</h1>
+          <p className="text-slate-400 mt-2 text-sm font-medium">Create your credentials</p>
+        </div>
+        
+        <div className="bg-white rounded-2xl border border-slate-200/50 shadow-2xl p-8">
+          <h2 className="text-lg font-bold text-slate-800 mb-6">Create your account</h2>
+          <form onSubmit={submit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Full Name</label>
+              <input type="text" value={name} onChange={e=>setName(e.target.value)} placeholder="Kiran Reddy"
+                className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-brand focus:bg-white focus:ring-4 focus:ring-brand/5 transition-all"/>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Email</label>
+              <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com"
+                className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-brand focus:bg-white focus:ring-4 focus:ring-brand/5 transition-all"/>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Password</label>
+              <input type="password" value={pwd} onChange={e=>setPwd(e.target.value)} placeholder="Min. 8 characters"
+                className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-brand focus:bg-white focus:ring-4 focus:ring-brand/5 transition-all"/>
+            </div>
+            <button type="submit" disabled={loading}
+              className="w-full mt-2 py-3 bg-brand text-white text-sm font-bold rounded-xl hover:bg-brand-hover disabled:opacity-60 transition-all shadow-md flex items-center justify-center gap-2">
+              {loading && <Spinner sz={4} white={true}/>}
+              {loading ? "Creating account..." : "Create account"}
+            </button>
+          </form>
+          
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div>
+            <div className="relative flex justify-center"><span className="px-3 bg-white text-xs font-medium text-slate-400 uppercase tracking-widest">or</span></div>
+          </div>
+          
+          <p className="text-center text-xs text-slate-400">
+            Already have an account?{" "}
+            <button onClick={onGoLogin} className="text-brand font-bold hover:underline">Sign in</button>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── AWS CONNECT WIZARD ────────────────────────────────────────────────────────
+function AWSConnect({ userProfile, onUpdateProfile, showToast, fetchWithAuth }) {
+  const [step, setStep] = useState(1);
+  const [ak, setAk] = useState("");
+  const [sk, setSk] = useState("");
+  const [region, setRegion] = useState("us-east-1");
+  const [loading, setLoading] = useState(false);
+
+  const connect = async () => {
+    if (!ak || !sk) {
+      showToast("Access Key and Secret Key are required.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await fetchWithAuth("/api/auth/aws", {
+        method: "PUT",
+        body: JSON.stringify({ aws_access_key: ak, aws_secret_key: sk, aws_region: region })
+      });
+      // reload profile
+      const prof = await fetchWithAuth("/api/auth/me");
+      onUpdateProfile(prof);
+      setStep(3);
+    } catch(err) {
+      showToast(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const disconnect = async () => {
+    setLoading(true);
+    try {
+      await fetchWithAuth("/api/auth/aws", { method: "DELETE" });
+      const prof = await fetchWithAuth("/api/auth/me");
+      onUpdateProfile(prof);
+      setStep(1);
+      setAk("");
+      setSk("");
+    } catch(err) {
+      showToast(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (userProfile.aws_connected) {
+    return (
+      <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-6 max-w-lg">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold">✓</div>
+          <div>
+            <h3 className="font-bold text-slate-800 text-sm">AWS Account Connected</h3>
+            <p className="text-xs text-slate-400 font-mono mt-0.5">Region: {userProfile.aws_region || "us-east-1"}</p>
+          </div>
+        </div>
+        <button onClick={disconnect} disabled={loading}
+          className="px-4 py-2 border-2 border-red-200 text-red-600 rounded-lg text-xs font-bold hover:bg-red-50 disabled:opacity-50 transition-colors">
+          {loading ? "Disconnecting..." : "Disconnect AWS Account"}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-2xl bg-white rounded-xl border border-slate-200/80 shadow-sm p-6">
+      <h3 className="font-bold text-slate-800 text-base mb-1">AWS Connection Wizard</h3>
+      <p className="text-xs text-slate-400 mb-6">Integrate your AWS infrastructure for live CSPM misconfiguration analysis.</p>
+
+      {/* Step Tracker */}
+      <div className="flex items-center gap-2 mb-8">
+        {[1, 2, 3].map((s) => (
+          <React.Fragment key={s}>
+            <div className="flex items-center gap-2">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all
+                ${s < step ? "bg-brand border-brand text-white"
+                  : s === step ? "border-brand text-brand font-extrabold"
+                  : "border-slate-200 text-slate-300"}`}>{s}</div>
+              <span className={`text-xs font-semibold ${s <= step ? "text-brand" : "text-slate-300"}`}>
+                {s === 1 ? "IAM Policy" : s === 2 ? "Credentials" : "Confirmation"}
+              </span>
+            </div>
+            {s < 3 && <div className={`flex-1 h-px ${s < step ? "bg-brand" : "bg-slate-100"}`}/>}
+          </React.Fragment>
+        ))}
+      </div>
+
+      {step === 1 && (
+        <div className="space-y-4">
+          <p className="text-sm text-slate-500 leading-relaxed">
+            ShieldScan requires <strong>read-only security scanning</strong> privileges. Please create an IAM User/Role in AWS Console and attach the standard <code className="bg-slate-100 px-1.5 py-0.5 rounded font-mono text-xs text-slate-700 font-semibold">SecurityAudit</code> managed policy.
+          </p>
+          <div className="bg-slate-900 rounded-xl p-4 font-mono text-xs text-slate-300 overflow-x-auto border border-slate-800">
+            <p className="text-slate-500 font-bold mb-2">// Recommended IAM SecurityAudit JSON policy structure</p>
+            <pre className="text-emerald-400">{"{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [\n    {\n      \"Effect\": \"Allow\",\n      \"Action\": [\n        \"iam:GenerateCredentialReport\",\n        \"s3:GetBucketAcl\",\n        \"s3:GetBucketPublicAccessBlock\",\n        \"ec2:DescribeSecurityGroups\",\n        \"rds:DescribeDBInstances\"\n      ],\n      \"Resource\": \"*\"\n    }\n  ]\n}"}</pre>
+          </div>
+          <button onClick={() => setStep(2)}
+            className="w-full py-2.5 bg-brand hover:bg-brand-hover text-white text-sm font-bold rounded-xl transition-all shadow-md">
+            I've set up my policy
+          </button>
+        </div>
+      )}
+
+      {step === 2 && (
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">AWS Access Key ID</label>
+            <input type="text" value={ak} onChange={e=>setAk(e.target.value)} placeholder="AKIAIOSFODNN7EXAMPLE"
+              className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-2.5 text-sm font-mono focus:outline-none focus:border-brand focus:bg-white transition-all"/>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">AWS Secret Access Key</label>
+            <input type="password" value={sk} onChange={e=>setSk(e.target.value)} placeholder="••••••••••••••••••••"
+              className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-brand focus:bg-white transition-all"/>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Default Scan Region</label>
+            <select value={region} onChange={e=>setRegion(e.target.value)}
+              className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-brand focus:bg-white transition-all">
+              <option value="us-east-1">us-east-1 (N. Virginia)</option>
+              <option value="us-east-2">us-east-2 (Ohio)</option>
+              <option value="us-west-1">us-west-1 (N. California)</option>
+              <option value="us-west-2">us-west-2 (Oregon)</option>
+              <option value="eu-west-1">eu-west-1 (Ireland)</option>
+              <option value="eu-central-1">eu-central-1 (Frankfurt)</option>
+              <option value="ap-southeast-1">ap-southeast-1 (Singapore)</option>
+            </select>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={() => setStep(1)} className="flex-1 py-2.5 border border-slate-200 rounded-xl text-slate-600 font-bold hover:bg-slate-50 transition-colors">Back</button>
+            <button onClick={connect} disabled={loading}
+              className="flex-1 py-2.5 bg-brand hover:bg-brand-hover text-white text-sm font-bold rounded-xl transition-all shadow-md flex items-center justify-center gap-2">
+              {loading && <Spinner sz={4} white={true}/>}
+              {loading ? "Connecting..." : "Connect Credentials"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {step === 3 && (
+        <div className="text-center py-6 space-y-4">
+          <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center text-2xl mx-auto shadow-inner">✓</div>
+          <h4 className="font-bold text-slate-800 text-lg">AWS Infrastructure Linked</h4>
+          <p className="text-sm text-slate-500 max-w-sm mx-auto">AWS credentials have been encrypted and saved securely. ShieldScan is configured to scan region: <strong>{region}</strong>.</p>
+          <button onClick={() => setStep(1)}
+            className="px-6 py-2.5 bg-brand hover:bg-brand-hover text-white text-sm font-bold rounded-xl transition-all shadow-md">
+            Done
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── FLOATING CHAT WIDGET ──────────────────────────────────────────────────────
+function FloatWidget({ fetchWithAuth, showToast, isPreloaded, preloadedText, clearPreload }) {
+  const [open, setOpen] = useState(false);
+  const [msgs, setMsgs] = useState([{ role: "assistant", content: "Quick help - ask me anything about your current scan findings." }]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const bottomRef = useRef(null);
+
+  useEffect(() => {
+    if (isPreloaded && preloadedText) {
+      setOpen(true);
+      send(preloadedText);
+      clearPreload();
+    }
+  }, [isPreloaded, preloadedText]);
+
+  useEffect(() => {
+    if (bottomRef.current) bottomRef.current.scrollIntoView({ behavior: "smooth" });
+  }, [msgs, loading]);
+
+  const send = async (overrideText = null) => {
+    const text = (overrideText || input).trim();
+    if (!text || loading) return;
+    setMsgs(p => [...p, { role: "user", content: text }]);
+    if (!overrideText) setInput("");
+    setLoading(true);
+    try {
+      const res = await fetchWithAuth("/api/ai/chat", {
+        method: "POST",
+        body: JSON.stringify({ message: text, include_findings_context: true })
+      });
+      setMsgs(p => [...p, { role: "assistant", content: res.reply }]);
+    } catch(err) {
+      showToast(err.message || "Failed to reach AI. Showing offline helper.");
+      setMsgs(p => [...p, { role: "assistant", content: "I'm having trouble connecting to the backend. Please check that uvicorn is running." }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3 select-none">
+      {open && (
+        <div className="w-96 bg-white rounded-2xl border border-slate-200/80 shadow-2xl flex flex-col overflow-hidden" style={{ height: 420 }}>
+          <div className="px-4 py-3.5 bg-brand text-white flex items-center justify-between flex-shrink-0">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">💬</span>
+              <div>
+                <p className="text-xs font-bold leading-tight">ShieldScan Assistant</p>
+                <p className="text-[9px] text-brand-light/70 font-semibold mt-0.5">RAG context connected</p>
+              </div>
+            </div>
+            <button onClick={() => setOpen(false)} className="text-white/70 hover:text-white text-lg font-bold leading-none">&times;</button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 scrollbar min-h-0 bg-slate-50">
+            {msgs.map((m, i) => (
+              <div key={i} className={`flex gap-2 mb-3.5 ${m.role === "assistant" ? "" : "flex-row-reverse"}`}>
+                <div className={`w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[9px] font-bold shadow-sm
+                  ${m.role === "assistant" ? "bg-brand text-white" : "bg-slate-200 text-slate-600"}`}>
+                  {m.role === "assistant" ? "AI" : "Me"}
+                </div>
+                <div className={`max-w-[78%] rounded-2xl px-3 py-2 text-xs leading-relaxed shadow-sm
+                  ${m.role === "assistant" ? "bg-white text-slate-700 border border-slate-100" : "bg-brand text-white"}`}>
+                  <pre className="whitespace-pre-wrap font-sans text-xs">{m.content}</pre>
+                </div>
+              </div>
+            ))}
+            {loading && (
+              <div className="flex gap-2 mb-3.5 items-center">
+                <div className="w-6 h-6 rounded-full bg-brand flex items-center justify-center text-[9px] font-bold text-white shadow-sm">AI</div>
+                <div className="flex items-center gap-2 bg-white rounded-xl px-3 py-2 border border-slate-100 shadow-sm">
+                  <Spinner sz={3.5}/><span className="text-xs text-slate-400 font-semibold">AI is analyzing...</span>
+                </div>
+              </div>
+            )}
+            <div ref={bottomRef}/>
+          </div>
+          <div className="px-3.5 py-3 border-t border-slate-100 flex gap-2 flex-shrink-0 bg-white">
+            <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter") send();}}
+              placeholder="Ask a quick question..."
+              className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand/5 transition-all"/>
+            <button onClick={() => send()} disabled={loading || !input.trim()}
+              className="px-4 py-2 bg-brand text-white text-xs font-bold rounded-xl hover:bg-brand-hover disabled:opacity-50 transition-colors shadow-sm">
+              Send
+            </button>
+          </div>
+        </div>
+      )}
+      <button onClick={() => setOpen(o => !o)}
+        className="w-14 h-14 bg-brand hover:bg-brand-hover text-white rounded-full shadow-2xl flex items-center justify-center text-2xl transition-all hover:scale-105 active:scale-95 border border-brand/20">
+        💬
+      </button>
+    </div>
+  );
+}
+
+// ── COMPONENT: DASHBOARD ─────────────────────────────────────────────────────
+function DashboardPage({ stats, findings, onAskAI, scanning, runScan }) {
+  const latestScannedAt = useMemo(() => {
+    return new Date().toLocaleTimeString();
+  }, [findings]);
+
+  const topCriticals = useMemo(() => {
+    return [...findings]
+      .filter(f => f.severity === "CRITICAL")
+      .slice(0, 5);
+  }, [findings]);
+
+  // CSS Chart layout
+  const maxVal = Math.max(stats.critical, stats.high, stats.medium, stats.low, 1);
+  const barChart = [
+    { label: "Critical", value: stats.critical, color: "bg-red-500" },
+    { label: "High", value: stats.high, color: "bg-orange-500" },
+    { label: "Medium", value: stats.medium, color: "bg-amber-500" },
+    { label: "Low", value: stats.low, color: "bg-blue-500" }
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* Run Scan Banner */}
+      <div className="bg-brand rounded-2xl p-6 text-white shadow-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative overflow-hidden">
+        <div className="absolute top-[-10%] right-[-10%] w-[350px] h-[350px] bg-white/5 rounded-full blur-2xl"></div>
+        <div className="relative z-10">
+          <h2 className="text-xl font-bold tracking-tight">Security Posture Scan Orchestrator</h2>
+          <p className="text-xs text-brand-light/80 mt-1 font-medium">Triggers Bot03 AWS assessment and containers verification in one run.</p>
+        </div>
+        <button onClick={runScan} disabled={scanning}
+          className="relative z-10 px-5 py-2.5 bg-white text-brand text-xs font-bold rounded-xl shadow-md hover:bg-brand-light transition-all flex items-center gap-2">
+          {scanning ? <Spinner sz={4}/> : null}
+          {scanning ? "Processing scans..." : "Run Security Scan"}
+        </button>
+      </div>
+
+      {/* Score Grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+        <RiskGauge score={stats.risk_score}/>
+        <StatCard label="Total Findings" value={stats.total} color="text-slate-800" sub="All misconfigurations"/>
+        <StatCard label="Critical Issues" value={stats.critical} color="text-red-600" sub="Fix immediately" icon="🚨"/>
+        <StatCard label="High Severity" value={stats.high} color="text-orange-500" sub="Resolve within 24h"/>
+        <StatCard label="Medium Severity" value={stats.medium} color="text-amber-600" sub="Fix within 7 days"/>
+        <StatCard label="Low Severity" value={stats.low} color="text-blue-500" sub="Review when free"/>
+      </div>
+
+      {/* Inner Panels */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Top 5 Critical Findings */}
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200/80 shadow-sm flex flex-col">
+          <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+            <h3 className="font-bold text-slate-800 text-sm">Top Priority Critical Findings</h3>
+            <span className="text-[10px] text-red-600 bg-red-50 border border-red-100 px-2.5 py-0.5 rounded-full font-semibold">Immediate Action</span>
+          </div>
+          <div className="divide-y divide-slate-100 flex-1">
+            {topCriticals.length === 0 ? (
+              <div className="p-8 text-center text-xs text-slate-400">No critical severity findings found.</div>
+            ) : topCriticals.map((f) => (
+              <div key={f.id} className="px-5 py-3.5 flex items-center justify-between gap-4 hover:bg-slate-50 transition-colors">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-slate-700 truncate">{f.title}</p>
+                  <p className="text-[10px] text-slate-400 mt-1 font-mono truncate">{f.resource} · {f.region}</p>
+                </div>
+                <div className="flex items-center gap-3 flex-shrink-0">
+                  <Badge s={f.severity}/>
+                  <span className="text-xs font-bold text-red-600">Risk {f.risk_score}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Severity Chart */}
+        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 flex flex-col">
+          <h3 className="font-bold text-slate-800 text-sm mb-4">Findings Severity Breakdown</h3>
+          <div className="flex-1 flex items-end justify-between gap-4 px-4 py-2 min-h-[140px]">
+            {barChart.map((bar) => {
+              const heightPct = Math.round((bar.value / maxVal) * 100);
+              return (
+                <div key={bar.label} className="flex-1 flex flex-col items-center gap-2">
+                  <span className="text-xs font-bold text-slate-600">{bar.value}</span>
+                  <div className="w-full bg-slate-100 rounded-md overflow-hidden relative" style={{ height: 100 }}>
+                    <div className={`absolute bottom-0 left-0 w-full ${bar.color} rounded-md transition-all duration-500`}
+                      style={{ height: `${heightPct}%` }}></div>
+                  </div>
+                  <span className="text-[10px] font-semibold text-slate-400">{bar.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── COMPONENT: FINDINGS ──────────────────────────────────────────────────────
+function FindingsPage({ findings, onAskAI, fetchWithAuth, showToast }) {
+  const [search, setSearch] = useState("");
+  const [sevFilter, setSevFilter] = useState("ALL");
+  const [typeFilter, setTypeFilter] = useState("ALL");
+  const [expandedRow, setExpandedRow] = useState(null);
+  
+  const [tips, setTips] = useState({});
+  const [tipLoading, setTipLoading] = useState({});
+
+  const filtered = useMemo(() => {
+    return findings
+      .filter(f => sevFilter === "ALL" || f.severity === sevFilter)
+      .filter(f => typeFilter === "ALL" || f.finding_type === typeFilter)
+      .filter(f => !search || f.title.toLowerCase().includes(search.toLowerCase()) || f.resource.toLowerCase().includes(search.toLowerCase()));
+  }, [findings, search, sevFilter, typeFilter]);
+
+  const loadInlineTip = async (f) => {
+    if (expandedRow === f.id) {
+      setExpandedRow(null);
+      return;
+    }
+    setExpandedRow(f.id);
+    if (tips[f.id]) return;
+    
+    setTipLoading(p => ({ ...p, [f.id]: true }));
+    try {
+      const res = await fetchWithAuth("/api/ai/chat", {
+        method: "POST",
+        body: JSON.stringify({
+          message: `Provide a numbered 3-step remediation instruction for the finding ${f.id}: "${f.title}" on the resource "${f.resource}". Be direct and concise.`,
+          include_findings_context: true
+        })
+      });
+      setTips(p => ({ ...p, [f.id]: res.reply }));
+    } catch(err) {
+      setTips(p => ({ ...p, [f.id]: "Cannot generate remediation: backend model is unavailable." }));
+    } finally {
+      setTipLoading(p => ({ ...p, [f.id]: false }));
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Filters Bar */}
+      <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 flex flex-col md:flex-row gap-4 items-center justify-between">
+        <div className="w-full md:w-72">
+          <input type="text" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search findings title or resources..."
+            className="w-full border border-slate-200 bg-slate-50 rounded-lg px-3.5 py-2 text-xs focus:outline-none focus:border-brand focus:bg-white transition-all"/>
+        </div>
+        <div className="flex gap-2 w-full md:w-auto overflow-x-auto">
+          {["ALL", "CRITICAL", "HIGH", "MEDIUM", "LOW"].map((s) => (
+            <button key={s} onClick={() => setSevFilter(s)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors select-none whitespace-nowrap
+                ${sevFilter === s ? "bg-brand text-white border-brand shadow-sm" : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"}`}>
+              {s}
+            </button>
+          ))}
+          <select value={typeFilter} onChange={e=>setTypeFilter(e.target.value)}
+            className="px-3 py-1.5 bg-slate-50 rounded-lg text-xs font-bold border border-slate-200 text-slate-500 focus:outline-none cursor-pointer">
+            <option value="ALL">All Types</option>
+            <option value="CSPM">CSPM (Cloud)</option>
+            <option value="CWPP">CWPP (Containers)</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto scrollbar">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50/70 border-b border-slate-100 text-[10px] text-slate-400 uppercase font-bold tracking-wider">
+                <th className="px-5 py-3">Severity</th>
+                <th className="px-5 py-3">Finding ID</th>
+                <th className="px-5 py-3">Title</th>
+                <th className="px-5 py-3">Resource</th>
+                <th className="px-5 py-3">Type</th>
+                <th className="px-5 py-3">Region</th>
+                <th className="px-5 py-3"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50 text-xs">
+              {filtered.length === 0 ? (
+                <tr><td colSpan="7" className="px-5 py-10 text-center text-slate-400">No findings matched the selected filters.</td></tr>
+              ) : filtered.map((f) => (
+                <React.Fragment key={f.id}>
+                  <tr className="hover:bg-slate-50/50 transition-colors cursor-pointer" onClick={() => loadInlineTip(f)}>
+                    <td className="px-5 py-4 whitespace-nowrap"><Badge s={f.severity}/></td>
+                    <td className="px-5 py-4 whitespace-nowrap font-mono text-slate-400 font-semibold">{f.id}</td>
+                    <td className="px-5 py-4 font-semibold text-slate-700 max-w-xs truncate" title={f.title}>{f.title}</td>
+                    <td className="px-5 py-4 font-mono text-slate-500 max-w-xs truncate" title={f.resource}>{f.resource}</td>
+                    <td className="px-5 py-4 whitespace-nowrap"><TypeBadge t={f.finding_type}/></td>
+                    <td className="px-5 py-4 whitespace-nowrap font-mono text-slate-400">{f.region}</td>
+                    <td className="px-5 py-4 whitespace-nowrap text-right">
+                      <span className="text-brand font-semibold select-none">{expandedRow === f.id ? "▲" : "▼"}</span>
+                    </td>
+                  </tr>
+                  
+                  {/* Expanded Row */}
+                  {expandedRow === f.id && (
+                    <tr className="bg-brand/5 border-b border-slate-100">
+                      <td colSpan="7" className="px-6 py-4">
+                        <div className="space-y-3">
+                          <div>
+                            <h4 className="font-bold text-slate-800 text-[11px] uppercase tracking-wider">Description</h4>
+                            <p className="text-slate-600 mt-1 leading-relaxed text-xs">{f.description || "No description provided."}</p>
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-slate-800 text-[11px] uppercase tracking-wider">CIS Reference</h4>
+                            <span className="inline-block mt-1 bg-slate-100 border border-slate-200 text-slate-600 px-2 py-0.5 rounded font-mono text-[10px] font-semibold">{f.cis_control || "N/A"}</span>
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-slate-800 text-[11px] uppercase tracking-wider">AI Recommended Action</h4>
+                            {tipLoading[f.id] ? (
+                              <div className="flex items-center gap-2 mt-1.5 text-slate-400"><Spinner sz={4}/><span className="animate-pulse text-xs">Consulting LLM...</span></div>
+                            ) : (
+                              <pre className="text-slate-700 bg-white/70 border border-slate-200/50 rounded-lg p-3 font-sans text-xs whitespace-pre-wrap mt-1 leading-relaxed shadow-inner">{tips[f.id] || f.remediation}</pre>
+                            )}
+                          </div>
+                          <div className="pt-2 flex justify-end">
+                            <button onClick={(e)=>{ e.stopPropagation(); onAskAI(`How do I remediate finding ${f.id}: ${f.title} on resource ${f.resource}?`); }}
+                              className="px-3.5 py-1.5 bg-brand hover:bg-brand-hover text-white text-xs font-bold rounded-lg shadow transition-colors">
+                              Ask AI about this finding
+                            </button>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── COMPONENT: CSPM ──────────────────────────────────────────────────────────
+function CSPMPage({ findings }) {
+  const [openCard, setOpenCard] = useState("S3");
+
+  const cspm = useMemo(() => {
+    return findings.filter(f => f.finding_type === "CSPM");
+  }, [findings]);
+
+  // Group by service
+  const groups = useMemo(() => {
+    const map = {
+      S3: { title: "Amazon S3", icon: "🪣", findings: [] },
+      IAM: { title: "AWS IAM", icon: "🔑", findings: [] },
+      "Security Groups": { title: "EC2 Security Groups", icon: "🛡️", findings: [] },
+      RDS: { title: "Amazon RDS", icon: "💾", findings: [] },
+      CloudTrail: { title: "AWS CloudTrail", icon: "👣", findings: [] },
+      EC2: { title: "Amazon EC2", icon: "💻", findings: [] },
+      VPC: { title: "Amazon VPC", icon: "🌐", findings: [] },
+      KMS: { title: "AWS KMS", icon: "🔒", findings: [] }
+    };
+    
+    cspm.forEach((f) => {
+      const text = f.title.toLowerCase();
+      if (text.includes("s3")) map.S3.findings.push(f);
+      else if (text.includes("iam") || text.includes("root")) map.IAM.findings.push(f);
+      else if (text.includes("security group") || text.includes("sg-") || text.includes("ssh")) map["Security Groups"].findings.push(f);
+      else if (text.includes("rds")) map.RDS.findings.push(f);
+      else if (text.includes("cloudtrail")) map.CloudTrail.findings.push(f);
+      else if (text.includes("ec2") || text.includes("instance")) map.EC2.findings.push(f);
+      else if (text.includes("vpc")) map.VPC.findings.push(f);
+      else if (text.includes("kms")) map.KMS.findings.push(f);
+      else map.IAM.findings.push(f); // default fallback
+    });
+
+    return map;
+  }, [cspm]);
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard label="CSPM Findings" value={cspm.length} color="text-slate-800" sub="Posture misconfigurations"/>
+        <StatCard label="Critical Issues" value={cspm.filter(f=>f.severity==="CRITICAL").length} color="text-red-600"/>
+        <StatCard label="High Issues" value={cspm.filter(f=>f.severity==="HIGH").length} color="text-orange-500"/>
+        <StatCard label="Medium Issues" value={cspm.filter(f=>f.severity==="MEDIUM").length} color="text-amber-500"/>
+      </div>
+
+      <div className="space-y-3">
+        {Object.entries(groups).map(([key, group]) => {
+          const count = group.findings.length;
+          // Determine worst severity
+          let worstSev = "LOW";
+          if (group.findings.some(f => f.severity === "CRITICAL")) worstSev = "CRITICAL";
+          else if (group.findings.some(f => f.severity === "HIGH")) worstSev = "HIGH";
+          else if (group.findings.some(f => f.severity === "MEDIUM")) worstSev = "MEDIUM";
+
+          return (
+            <div key={key} className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
+              <button onClick={() => setOpenCard(openCard === key ? null : key)}
+                className="w-full px-5 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                <div className="flex items-center gap-3">
+                  <span className="text-xl leading-none">{group.icon}</span>
+                  <span className="font-bold text-slate-800 text-sm">{group.title}</span>
+                  {count > 0 && (
+                    <span className="text-[10px] font-bold bg-slate-100 border border-slate-200 text-slate-500 px-2 py-0.5 rounded-full ml-1">
+                      {count} finding{count > 1 ? "s" : ""}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  {count > 0 ? (
+                    <React.Fragment>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">Worst:</span>
+                      <Badge s={worstSev}/>
+                    </React.Fragment>
+                  ) : (
+                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">Compliant</span>
+                  )}
+                  <span className="text-slate-300 font-bold ml-2 text-xs">{openCard === key ? "▲" : "▼"}</span>
+                </div>
+              </button>
+              
+              {openCard === key && count > 0 && (
+                <div className="border-t border-slate-100 bg-slate-50/30 divide-y divide-slate-100">
+                  {group.findings.map((f) => (
+                    <div key={f.id} className="p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <Badge s={f.severity}/>
+                          <p className="font-bold text-slate-700 text-xs">{f.title}</p>
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-mono truncate">{f.resource}</p>
+                        <p className="text-[10px] text-brand font-medium">Fix: {f.remediation}</p>
+                      </div>
+                      <span className="text-[10px] bg-slate-100 border border-slate-200 text-slate-500 px-2 py-0.5 rounded font-mono font-semibold self-start md:self-center">
+                        {f.cis_control}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── COMPONENT: CWPP ──────────────────────────────────────────────────────────
+function CWPPPage({ findings }) {
+  const [filter, setFilter] = useState("ALL");
+  const cwpp = useMemo(() => {
+    return findings.filter(f => f.finding_type === "CWPP");
+  }, [findings]);
+
+  const filtered = useMemo(() => {
+    return cwpp.filter(f => filter === "ALL" || f.severity === filter);
+  }, [cwpp, filter]);
+
+  return (
+    <div className="space-y-4">
+      {/* CWPP Cards info */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard label="Vulnerable Images" value="2" color="text-slate-800" sub="Scanned via Trivy"/>
+        <StatCard label="CWPP CVE Findings" value={cwpp.length} color="text-red-600"/>
+        <StatCard label="High CVEs" value={cwpp.filter(f=>f.severity==="HIGH").length} color="text-orange-500"/>
+        <StatCard label="Medium CVEs" value={cwpp.filter(f=>f.severity==="MEDIUM").length} color="text-amber-500"/>
+      </div>
+
+      {/* Grid Filters */}
+      <div className="flex items-center justify-between bg-white border border-slate-200/80 shadow-sm p-4 rounded-xl">
+        <p className="font-bold text-slate-800 text-sm">Container Image Vulnerability (CVE) Cards</p>
+        <div className="flex gap-2">
+          {["ALL", "HIGH", "MEDIUM"].map((s) => (
+            <button key={s} onClick={() => setFilter(s)}
+              className={`px-2.5 py-1 rounded-md text-xs font-bold border transition-colors select-none
+                ${filter === s ? "bg-brand text-white border-brand shadow-sm" : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"}`}>
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {filtered.length === 0 ? (
+          <div className="col-span-2 bg-white rounded-xl border border-slate-200/80 p-8 text-center text-xs text-slate-400">No CVE findings discovered.</div>
+        ) : filtered.map((cve) => {
+          const cvss = cve.cvss_score || 5.0;
+          return (
+            <div key={cve.id} className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-5 flex flex-col gap-4 hover:border-brand/30 transition-all hover:shadow-md">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-xl">📦</span>
+                  <div>
+                    <h4 className="font-bold text-slate-800 text-sm">{cve.id}</h4>
+                    <p className="text-[10px] text-slate-400 font-semibold uppercase mt-0.5 tracking-wider">Trivy CVE Analyzer</p>
+                  </div>
+                </div>
+                <Badge s={cve.severity}/>
+              </div>
+              <div className="space-y-1.5 flex-1">
+                <p className="font-bold text-slate-700 text-xs">{cve.title}</p>
+                <p className="text-xs text-slate-500 leading-relaxed truncate">{cve.description}</p>
+                <div className="pt-2 grid grid-cols-2 gap-3 text-[10px]">
+                  <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
+                    <span className="text-slate-400 uppercase font-semibold">Affected Package</span>
+                    <p className="font-bold text-slate-700 mt-0.5 font-mono">{cve.affected_package}</p>
+                  </div>
+                  <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
+                    <span className="text-slate-400 uppercase font-semibold">Fixed Version</span>
+                    <p className="font-bold text-brand mt-0.5 font-mono">{cve.fixed_version}</p>
+                  </div>
+                </div>
+              </div>
+              
+              {/* CVSS Score Bar */}
+              <div className="pt-2">
+                <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 mb-1">
+                  <span>CVSS Score</span>
+                  <span style={{ color: getRiskColor(cvss * 10) }}>{cvss} / 10.0</span>
+                </div>
+                <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full transition-all"
+                    style={{ width: `${cvss * 10}%`, backgroundColor: getRiskColor(cvss * 10) }}></div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── COMPONENT: COMPLIANCE ─────────────────────────────────────────────────────
+function CompliancePage() {
+  const [openSec, setOpenSec] = useState("1");
+  const [framework, setFramework] = useState("CIS AWS");
+
+  const pass = CIS_CONTROLS.filter(c => c.status === "PASS").length;
+  const fail = CIS_CONTROLS.filter(c => c.status === "FAIL").length;
+  const unk = CIS_CONTROLS.filter(c => c.status === "UNKNOWN").length;
+  const scorePct = Math.round((pass / (pass + fail)) * 100);
+
+  const statusColors = {
+    PASS: "bg-emerald-100 text-emerald-800 border-emerald-200",
+    FAIL: "bg-red-100 text-red-800 border-red-200",
+    UNKNOWN: "bg-slate-100 text-slate-400 border-slate-200"
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 flex flex-col items-center justify-center">
+          <p className="text-[11px] text-slate-400 uppercase tracking-wider font-semibold mb-2">Compliance Score</p>
+          <p className="text-4xl font-extrabold text-brand">{scorePct}%</p>
+          <div className="w-full h-1.5 bg-slate-100 rounded-full mt-3 overflow-hidden">
+            <div className="h-full bg-brand rounded-full" style={{ width: `${scorePct}%` }}></div>
+          </div>
+          <p className="text-[9px] text-slate-400 mt-2 font-medium">CIS AWS Benchmark v1.5.0</p>
+        </div>
+        <StatCard label="Passing Controls" value={pass} color="text-emerald-600" sub="Meets benchmark audits"/>
+        <StatCard label="Failing Controls" value={fail} color="text-red-600" sub="Requires remediation"/>
+        <StatCard label="Unchecked Controls" value={unk} color="text-slate-400" sub="Manual assessment needed"/>
+      </div>
+
+      <div className="flex gap-2 border-b border-slate-200 pb-px">
+        {["CIS AWS", "NIST 800-53", "SOC 2", "ISO 27001"].map((fw) => (
+          <button key={fw} onClick={() => setFramework(fw)}
+            className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-colors select-none
+              ${framework === fw ? "border-brand text-brand" : "border-transparent text-slate-400 hover:text-slate-600"}`}>
+            {fw}
+          </button>
+        ))}
+      </div>
+
+      {framework !== "CIS AWS" ? (
+        <div className="bg-white border border-slate-200/80 p-8 rounded-xl text-center text-xs text-slate-400">
+          ⚠️ {framework} compliance validation is a premium feature. Currently showing demo values from CIS AWS Benchmark audits.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {Object.entries(CIS_SECTIONS).map(([sec, sectionTitle]) => {
+            const sectionControls = CIS_CONTROLS.filter(c => c.section === sec);
+            const passed = sectionControls.filter(c => c.status === "PASS").length;
+            const total = sectionControls.filter(c => c.status !== "UNKNOWN").length;
+
+            return (
+              <div key={sec} className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
+                <button onClick={() => setOpenSec(openSec === sec ? null : sec)}
+                  className="w-full px-5 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-bold text-slate-400 w-5">0{sec}</span>
+                    <span className="font-bold text-slate-800 text-sm">{sectionTitle}</span>
+                  </div>
+                  <div className="flex items-center gap-3.5">
+                    <span className="text-[10px] text-slate-400 font-bold">{passed} / {passed + sectionControls.filter(c=>c.status==="FAIL").length} audited pass</span>
+                    <span className="text-slate-300 font-bold text-xs">{openSec === sec ? "▲" : "▼"}</span>
+                  </div>
+                </button>
+                
+                {openSec === sec && (
+                  <div className="border-t border-slate-100 bg-slate-50/20 divide-y divide-slate-100">
+                    {sectionControls.map((c) => (
+                      <div key={c.id} className="px-5 py-3 flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                          <span className="font-mono text-slate-400 text-[10px] w-12 font-bold">{c.id}</span>
+                          <span className="text-slate-600 text-xs font-semibold">{c.title}</span>
+                          {c.fid && (
+                            <span className="text-[9px] font-mono font-bold bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded">
+                              {c.fid}
+                            </span>
+                          )}
+                        </div>
+                        <span className={`inline-block px-2.5 py-0.5 rounded text-[10px] font-bold border ${statusColors[c.status]}`}>
+                          {c.status === "UNKNOWN" ? "MANUAL" : c.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── COMPONENT: INVENTORY ─────────────────────────────────────────────────────
+function InventoryPage() {
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("ALL");
+
+  const types = useMemo(() => {
+    return ["ALL", ...new Set(INVENTORY.map(item => item.type))];
+  }, []);
+
+  const filtered = useMemo(() => {
+    return INVENTORY
+      .filter(item => typeFilter === "ALL" || item.type === typeFilter)
+      .filter(item => !search || item.name.toLowerCase().includes(search.toLowerCase()) || item.type.toLowerCase().includes(search.toLowerCase()));
+  }, [search, typeFilter]);
+
+  const riskBadge = {
+    Critical: "bg-red-100 text-red-800 border-red-200",
+    "At Risk": "bg-orange-100 text-orange-800 border-orange-200",
+    Active: "bg-emerald-100 text-emerald-800 border-emerald-200"
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Grid metrics */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard label="Total Resources" value={INVENTORY.length} color="text-slate-800"/>
+        <StatCard label="Critical Risk" value={INVENTORY.filter(i=>i.risk==="Critical").length} color="text-red-600"/>
+        <StatCard label="Warn/At Risk" value={INVENTORY.filter(i=>i.risk==="At Risk").length} color="text-orange-500"/>
+        <StatCard label="Healthy Resources" value={INVENTORY.filter(i=>i.risk==="Active").length} color="text-emerald-600"/>
+      </div>
+
+      {/* Toolbar */}
+      <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 flex flex-col md:flex-row gap-4 items-center justify-between">
+        <p className="font-bold text-slate-800 text-sm">AWS Asset Inventory Directory</p>
+        <div className="flex gap-2 w-full md:w-auto">
+          <input type="text" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search resources..."
+            className="w-full md:w-56 border border-slate-200 bg-slate-50 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-brand focus:bg-white transition-all"/>
+          <select value={typeFilter} onChange={e=>setTypeFilter(e.target.value)}
+            className="bg-slate-50 text-slate-500 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold focus:outline-none cursor-pointer">
+            {types.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* Directory Table */}
+      <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto scrollbar">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50/70 border-b border-slate-100 text-[10px] text-slate-400 uppercase font-bold tracking-wider">
+                <th className="px-5 py-3">Asset ID</th>
+                <th className="px-5 py-3">Resource Name</th>
+                <th className="px-5 py-3">AWS Type</th>
+                <th className="px-5 py-3">Region</th>
+                <th className="px-5 py-3">Status / Risk</th>
+                <th className="px-5 py-3">Discovered Issues</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50 text-xs">
+              {filtered.map((item) => (
+                <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
+                  <td className="px-5 py-4 whitespace-nowrap font-mono text-slate-400 font-semibold">{item.id}</td>
+                  <td className="px-5 py-4 font-bold text-slate-700">{item.name}</td>
+                  <td className="px-5 py-4 text-slate-500 font-semibold">{item.type}</td>
+                  <td className="px-5 py-4 font-mono text-slate-400">{item.region}</td>
+                  <td className="px-5 py-4 whitespace-nowrap">
+                    <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold border ${riskBadge[item.risk] || "bg-slate-100 text-slate-500 border-slate-200"}`}>
+                      {item.risk === "Active" ? "Active" : item.risk}
+                    </span>
+                  </td>
+                  <td className="px-5 py-4 whitespace-nowrap">
+                    {item.findings > 0 ? (
+                      <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded-full">{item.findings} issue{item.findings > 1 ? "s" : ""}</span>
+                    ) : (
+                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full">Secured</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── COMPONENT: REPORTS & EXPORTS ──────────────────────────────────────────────
+function ReportsPage({ findings, stats, showToast }) {
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [range, setRange] = useState("30");
+
+  const downloadCSV = () => {
+    const headers = ["ID", "Finding Type", "Severity", "Resource", "Title", "Region", "Remediation", "CIS Control"];
+    const csvRows = [
+      headers.join(","),
+      ...findings.map(f => [
+        f.id,
+        f.finding_type,
+        f.severity,
+        `"${f.resource.replace(/"/g, '""')}"`,
+        `"${f.title.replace(/"/g, '""')}"`,
+        f.region,
+        `"${(f.fix_recommendation || f.remediation).replace(/"/g, '""')}"`,
+        f.cis_control || "N/A"
+      ].join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvRows], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `shieldscan_findings_report_${range}days.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast("Downloaded CSV report successfully", "info");
+  };
+
+  const downloadJSON = () => {
+    const reportData = {
+      generated_at: new Date().toISOString(),
+      date_range_days: parseInt(range),
+      stats: stats,
+      findings: findings
+    };
+
+    const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `shieldscan_findings_report_${range}days.json`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast("Downloaded JSON findings data", "info");
+  };
+
+  const generatePDF = async () => {
+    setPdfLoading(true);
+    await new Promise(r => setTimeout(r, 400));
+    
+    const dateStr = new Date().toLocaleDateString();
+    const rowsHtml = findings.map(f => `
+      <tr style="border-bottom: 1px solid #f1f5f9;">
+        <td style="padding: 10px; font-family: monospace; font-size: 11px; color: #64748b;">${f.id}</td>
+        <td style="padding: 10px; font-weight: bold; color: #1e293b;">${f.title}</td>
+        <td style="padding: 10px; font-family: monospace; color: #475569;">${f.resource}</td>
+        <td style="padding: 10px;"><span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; text-transform: uppercase; background-color: ${f.severity === 'CRITICAL' ? '#fee2e2' : f.severity === 'HIGH' ? '#ffedd5' : '#fef3c7'}; color: ${f.severity === 'CRITICAL' ? '#b91c1c' : f.severity === 'HIGH' ? '#c2410c' : '#b45309'};">${f.severity}</span></td>
+        <td style="padding: 10px; font-size: 11px; color: #0f6e56;">${f.remediation || f.fix_recommendation}</td>
+      </tr>
+    `).join("");
+
+    const printWin = window.open("", "_blank");
+    printWin.document.write(`
+      <html>
+        <head>
+          <title>ShieldScan Security Audit PDF</title>
+          <style>
+            body { font-family: system-ui, -apple-system, sans-serif; padding: 40px; color: #334155; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th { text-align: left; padding: 12px 10px; background-color: #f8fafc; font-size: 10px; font-weight: bold; uppercase; color: #64748b; border-bottom: 2px solid #cbd5e1; }
+            .header { border-bottom: 4px solid #0f6e56; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; }
+            .score-card { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 30px; }
+            .card { border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px; }
+            .card-title { font-size: 10px; color: #94a3b8; font-weight: bold; uppercase; }
+            .card-val { font-size: 24px; font-weight: 800; margin-top: 5px; color: #1e293b; }
+            @media print { .no-print { display: none; } body { padding: 10px; } }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <h1 style="margin: 0; color: #0f6e56; font-size: 28px;">ShieldScan</h1>
+              <p style="margin: 5px 0 0; color: #64748b; font-size: 13px;">Cloud Native Infrastructure Audit Report</p>
+            </div>
+            <div style="text-align: right; font-size: 12px; color: #64748b;">
+              <p>Generated: ${dateStr}</p>
+              <p>Audit Window: Last ${range} Days</p>
+            </div>
+          </div>
+          <div class="score-card">
+            <div class="card"><div class="card-title">Risk Posture</div><div class="card-val" style="color: #0f6e56;">${stats.risk_score}/100</div></div>
+            <div class="card"><div class="card-title">Total Findings</div><div class="card-val">${stats.total}</div></div>
+            <div class="card"><div class="card-title">Critical Findings</div><div class="card-val" style="color: #ef4444;">${stats.critical}</div></div>
+            <div class="card"><div class="card-title">High Findings</div><div class="card-val" style="color: #f97316;">${stats.high}</div></div>
+          </div>
+          <h3 style="font-size: 14px; text-transform: uppercase; color: #1e293b; letter-spacing: 0.05em; margin-bottom: 10px;">Security Finding Records</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Finding Title</th>
+                <th>Resource Name</th>
+                <th>Severity</th>
+                <th>Remediation Path</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+          <div class="no-print" style="margin-top: 30px; text-align: center;">
+            <button onclick="window.print()" style="padding: 10px 24px; background-color: #0f6e56; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Print Document / Save PDF</button>
+          </div>
+        </body>
+      </html>
+    `);
+    printWin.document.close();
+    setPdfLoading(false);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div>
+          <h3 className="font-bold text-slate-800 text-sm">Compliance and Assessment Exports</h3>
+          <p className="text-xs text-slate-400 font-medium mt-0.5">Generate spreadsheet sheets, machine JSON dumps, or print PDFs.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-400 font-semibold">Audit Window:</span>
+          <select value={range} onChange={e=>setRange(e.target.value)}
+            className="bg-slate-50 border border-slate-200 text-slate-500 rounded-lg px-3 py-1.5 text-xs font-bold focus:outline-none cursor-pointer">
+            <option value="7">Last 7 Days</option>
+            <option value="30">Last 30 Days</option>
+            <option value="90">Last 90 Days</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Grid export */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div onClick={downloadCSV} className="bg-white rounded-xl border border-slate-200 hover:border-brand/40 shadow-sm p-5 flex flex-col gap-4 cursor-pointer hover:shadow-md transition-all">
+          <div className="text-slate-300 font-extrabold text-2xl">CSV</div>
+          <div className="flex-1">
+            <h4 className="font-bold text-slate-700 text-sm">Spreadsheet Format</h4>
+            <p className="text-xs text-slate-400 mt-1 leading-relaxed">Download findings mapped to standard rows. Recommended for Excel analysis.</p>
+          </div>
+          <button className="py-2.5 bg-brand hover:bg-brand-hover text-white text-xs font-bold rounded-lg shadow-sm transition-colors w-full">Download CSV Spreadsheet</button>
+        </div>
+        <div onClick={downloadJSON} className="bg-white rounded-xl border border-slate-200 hover:border-brand/40 shadow-sm p-5 flex flex-col gap-4 cursor-pointer hover:shadow-md transition-all">
+          <div className="text-slate-300 font-extrabold text-2xl">JSON</div>
+          <div className="flex-1">
+            <h4 className="font-bold text-slate-700 text-sm">Machine Raw Payload</h4>
+            <p className="text-xs text-slate-400 mt-1 leading-relaxed">Export complete structured JSON data. Ideal for importing into compliance dashboards.</p>
+          </div>
+          <button className="py-2.5 bg-brand hover:bg-brand-hover text-white text-xs font-bold rounded-lg shadow-sm transition-colors w-full">Download JSON Data</button>
+        </div>
+        <div onClick={generatePDF} className="bg-white rounded-xl border border-slate-200 hover:border-brand/40 shadow-sm p-5 flex flex-col gap-4 cursor-pointer hover:shadow-md transition-all">
+          <div className="text-slate-300 font-extrabold text-2xl">PDF</div>
+          <div className="flex-1">
+            <h4 className="font-bold text-slate-700 text-sm">Executive PDF Report</h4>
+            <p className="text-xs text-slate-400 mt-1 leading-relaxed">Render standard formatted security audit records. Includes executive summary.</p>
+          </div>
+          <button className="py-2.5 bg-brand hover:bg-brand-hover text-white text-xs font-bold rounded-lg shadow-sm transition-colors w-full">
+            {pdfLoading ? "Formatting..." : "Generate PDF Document"}
+          </button>
+        </div>
+      </div>
+
+      {/* Preview */}
+      <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+          <h3 className="font-bold text-slate-800 text-xs uppercase tracking-wider">Report Preview Console</h3>
+          <span className="text-[10px] text-slate-400 font-semibold uppercase">{range} Days View</span>
+        </div>
+        <div className="p-5">
+          <div className="bg-slate-900 text-emerald-400 font-mono text-[11px] p-4 rounded-xl space-y-1 overflow-x-auto shadow-inner border border-slate-800 leading-relaxed">
+            <p className="text-slate-500">// ShieldScan Audit Summary Report -- {new Date().toLocaleDateString()}</p>
+            <p className="text-slate-500">---------------------------------------------------</p>
+            <p>CRITICAL RISKS  : {stats.critical} active</p>
+            <p>HIGH RISKS      : {stats.high} active</p>
+            <p>MEDIUM RISKS    : {stats.medium} active</p>
+            <p>COMPLIANCE RATE : {stats.risk_score}% assessed posture score</p>
+            <p className="text-slate-500">---------------------------------------------------</p>
+            {findings.slice(0, 3).map((f, i) => (
+              <p key={f.id}>#{i+1} [{f.severity}] {f.id} - {f.title} on {f.resource}</p>
+            ))}
+            <p className="text-slate-500">... showing first {Math.min(findings.length, 3)} of {findings.length} findings</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── COMPONENT: AI ASSISTANT ──────────────────────────────────────────────────
+function AIAssistantPage({ fetchWithAuth, showToast }) {
+  const [msgs, setMsgs] = useState([
+    { role: "assistant", content: "Hello! I am ShieldScan AI. I have loaded your posture findings, container vulnerability records, and CIS AWS benchmarks context.\n\nAsk me how to remediate S3 buckets, delete keys, resolve CVE packages, or secure compliance drift." }
+  ]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const bottomRef = useRef(null);
+
+  const SUGGESTION_CHIPS = [
+    "What are my critical findings?",
+    "How do I fix the S3 issue?",
+    "Explain my risk score",
+    "Show CIS compliance gaps"
+  ];
+
+  useEffect(() => {
+    if (bottomRef.current) bottomRef.current.scrollIntoView({ behavior: "smooth" });
+  }, [msgs, loading]);
+
+  const send = async (overrideText = null) => {
+    const text = (overrideText || input).trim();
+    if (!text || loading) return;
+    setMsgs(p => [...p, { role: "user", content: text }]);
+    if (!overrideText) setInput("");
+    setLoading(true);
+    try {
+      const res = await fetchWithAuth("/api/ai/chat", {
+        method: "POST",
+        body: JSON.stringify({ message: text, include_findings_context: true })
+      });
+      setMsgs(p => [...p, { role: "assistant", content: res.reply }]);
+    } catch(err) {
+      showToast(err.message || "Failed to query AI assistant.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm flex flex-col h-full min-h-0">
+      <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
+        <div>
+          <h3 className="font-bold text-slate-800 text-sm">ShieldScan Conversational AI</h3>
+          <p className="text-[10px] text-slate-400 font-semibold mt-0.5">RAG retrieval grounded in AWS Security Guidelines</p>
+        </div>
+        <span className="text-[9px] bg-brand/10 border border-brand/20 text-brand px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Online</span>
+      </div>
+
+      {/* Suggestion Chips */}
+      <div className="px-5 py-2.5 border-b border-slate-50 flex flex-wrap gap-2 flex-shrink-0 bg-slate-50/50">
+        {SUGGESTION_CHIPS.map((chip) => (
+          <button key={chip} onClick={() => send(chip)}
+            className="text-[10px] font-bold px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-500 rounded-lg transition-colors">
+            {chip}
+          </button>
+        ))}
+      </div>
+
+      {/* Conversation Thread */}
+      <div className="flex-1 overflow-y-auto p-5 scrollbar min-h-0 bg-slate-50/20">
+        {msgs.map((m, i) => (
+          <div key={i} className={`flex gap-3 mb-4.5 ${m.role === "assistant" ? "" : "flex-row-reverse"}`}>
+            <div className={`w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center font-bold text-xs shadow-sm
+              ${m.role === "assistant" ? "bg-brand text-white border border-brand/10" : "bg-slate-200 text-slate-600"}`}>
+              {m.role === "assistant" ? "AI" : "Me"}
+            </div>
+            <div className={`max-w-[75%] rounded-2xl px-4 py-3 text-xs leading-relaxed shadow-sm border
+              ${m.role === "assistant" ? "bg-white text-slate-700 border-slate-100" : "bg-brand text-white border-brand/20"}`}>
+              <pre className="whitespace-pre-wrap font-sans text-xs leading-relaxed">{m.content}</pre>
+            </div>
+          </div>
+        ))}
+        {loading && (
+          <div className="flex gap-3 mb-4.5 items-center">
+            <div className="w-8 h-8 rounded-xl bg-brand flex items-center justify-center text-xs font-bold text-white shadow-sm">AI</div>
+            <div className="flex items-center gap-2 bg-white rounded-2xl px-4 py-2 border border-slate-100 shadow-sm">
+              <Spinner sz={3.5}/><span className="text-xs text-slate-400 font-semibold animate-pulse">AI is parsing context guidelines...</span>
+            </div>
+          </div>
+        )}
+        <div ref={bottomRef}/>
+      </div>
+
+      {/* Text Area Input */}
+      <div className="px-5 py-3 border-t border-slate-100 flex gap-3 flex-shrink-0 bg-white rounded-b-xl">
+        <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter") send();}}
+          placeholder="Ask anything about security posture remediation..."
+          className="flex-1 border border-slate-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand/5 transition-all"/>
+        <button onClick={() => send()} disabled={loading || !input.trim()}
+          className="px-5 py-2.5 bg-brand hover:bg-brand-hover text-white text-xs font-bold rounded-xl transition-all shadow-md">
+          Send Prompt
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── COMPONENT: SETTINGS ──────────────────────────────────────────────────────
+function SettingsPage({ userProfile, onUpdateProfile, showToast, fetchWithAuth }) {
+  const [activeTab, setActiveTab] = useState("profile");
+  const [savedMessage, setSavedMessage] = useState(false);
+  const [profile, setProfile] = useState({ name: userProfile.full_name || "", email: userProfile.email || "" });
+  
+  const [emailAlerts, setEmailAlerts] = useState(true);
+  const [criticalOnly, setCriticalOnly] = useState(true);
+  const [weeklyReport, setWeeklyReport] = useState(false);
+
+  const saveSettings = () => {
+    setSavedMessage(true);
+    setTimeout(() => setSavedMessage(false), 2000);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Tabs */}
+      <div className="flex border-b border-slate-200 pb-px">
+        {[
+          { id: "profile", label: "Profile Settings" },
+          { id: "aws", label: "AWS Connection" },
+          { id: "notifications", label: "Notification Settings" }
+        ].map((t) => (
+          <button key={t.id} onClick={() => setActiveTab(t.id)}
+            className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-colors select-none
+              ${activeTab === t.id ? "border-brand text-brand" : "border-transparent text-slate-400 hover:text-slate-600"}`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "profile" && (
+        <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-6 max-w-lg space-y-4">
+          <h3 className="font-bold text-slate-800 text-sm mb-4">User Account Information</h3>
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Display Name</label>
+            <input type="text" value={profile.name} onChange={e=>setProfile({...profile, name: e.target.value})}
+              className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-brand focus:bg-white transition-all"/>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Email Credentials</label>
+            <input type="email" value={profile.email} disabled
+              className="w-full border border-slate-200 bg-slate-50/50 text-slate-400 rounded-xl px-4 py-2.5 text-sm cursor-not-allowed"/>
+          </div>
+          <button onClick={saveSettings}
+            className="px-5 py-2.5 bg-brand hover:bg-brand-hover text-white text-xs font-bold rounded-xl transition-all shadow-md">
+            {savedMessage ? "Profile Saved ✓" : "Save Changes"}
+          </button>
+        </div>
+      )}
+
+      {activeTab === "aws" && (
+        <AWSConnect userProfile={userProfile} onUpdateProfile={onUpdateProfile} showToast={showToast} fetchWithAuth={fetchWithAuth}/>
+      )}
+
+      {activeTab === "notifications" && (
+        <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-6 max-w-lg space-y-5">
+          <h3 className="font-bold text-slate-800 text-sm mb-4">Mailing Preferences</h3>
+          
+          <div className="flex items-center justify-between py-2 border-b border-slate-50">
+            <div>
+              <p className="text-xs font-bold text-slate-700">Email Alerts</p>
+              <p className="text-[10px] text-slate-400 font-medium">Send automatic email notifications on critical findings.</p>
+            </div>
+            <button onClick={() => setEmailAlerts(!emailAlerts)}
+              className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors focus:outline-none
+                ${emailAlerts ? "bg-brand" : "bg-slate-200"}`}>
+              <span className={`w-5 h-5 bg-white rounded-full shadow block transition-transform
+                ${emailAlerts ? "translate-x-4" : "translate-x-0"}`}></span>
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between py-2 border-b border-slate-50">
+            <div>
+              <p className="text-xs font-bold text-slate-700">Critical findings only</p>
+              <p className="text-[10px] text-slate-400 font-medium">Restrict active alerts to CRITICAL posture violations only.</p>
+            </div>
+            <button onClick={() => setCriticalOnly(!criticalOnly)}
+              className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors focus:outline-none
+                ${criticalOnly ? "bg-brand" : "bg-slate-200"}`}>
+              <span className={`w-5 h-5 bg-white rounded-full shadow block transition-transform
+                ${criticalOnly ? "translate-x-4" : "translate-x-0"}`}></span>
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between py-2 border-b border-slate-50">
+            <div>
+              <p className="text-xs font-bold text-slate-700">Weekly report summary</p>
+              <p className="text-[10px] text-slate-400 font-medium">Digest weekly CIS benchmark compliance audits.</p>
+            </div>
+            <button onClick={() => setWeeklyReport(!weeklyReport)}
+              className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors focus:outline-none
+                ${weeklyReport ? "bg-brand" : "bg-slate-200"}`}>
+              <span className={`w-5 h-5 bg-white rounded-full shadow block transition-transform
+                ${weeklyReport ? "translate-x-4" : "translate-x-0"}`}></span>
+            </button>
+          </div>
+
+          <button onClick={saveSettings}
+            className="px-5 py-2.5 bg-brand hover:bg-brand-hover text-white text-xs font-bold rounded-xl transition-all shadow-md">
+            {savedMessage ? "Preferences Saved ✓" : "Save Preferences"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── MAIN LAYOUT / APPLICATION CONTAINER ──────────────────────────────────────
+const NAV_GROUPS = [
+  {
+    group: "Overview",
+    items: [
+      { id: "dashboard", label: "Dashboard", icon: "📊" },
+      { id: "findings", label: "Findings Explorer", icon: "🔍" }
+    ]
+  },
+  {
+    group: "Security",
+    items: [
+      { id: "cspm", label: "CSPM Posture", icon: "🛡️" },
+      { id: "cwpp", label: "CWPP Container CVEs", icon: "📦" },
+      { id: "compliance", label: "CIS Compliance", icon: "📜" }
+    ]
+  },
+  {
+    group: "Assets",
+    items: [
+      { id: "inventory", label: "Inventory Directory", icon: "🗂️" }
+    ]
+  },
+  {
+    group: "AI Ops",
+    items: [
+      { id: "ai", label: "AI Security Assistant", icon: "🤖" }
+    ]
+  },
+  {
+    group: "System Settings",
+    items: [
+      { id: "reports", label: "Reports & Exports", icon: "📥" },
+      { id: "settings", label: "Account Settings", icon: "⚙️" }
+    ]
+  }
+];
+
+function MainApp({ token, onLogout }) {
+  const [currentTab, setCurrentTab] = useState("dashboard");
+  
+  // States
+  const [profile, setProfile] = useState({ id: 0, email: "", full_name: "", aws_connected: false, aws_region: "us-east-1" });
+  const [findings, setFindings] = useState([]);
+  const [stats, setStats] = useState({ total: 0, critical: 0, high: 0, medium: 0, low: 0, risk_score: 0 });
+  
+  const [scanning, setScanning] = useState(false);
+  const [toasts, setToasts] = useState([]);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  // Floating Chat preloader
+  const [preChatText, setPreChatText] = useState(null);
+  const [isPreChatTriggered, setIsPreChatTriggered] = useState(false);
+
+  const showToast = (message, type = "error") => {
+    const id = Date.now();
+    setToasts(p => [...p, { id, message, type }]);
+  };
+
+  const removeToast = (id) => {
+    setToasts(p => p.filter(t => t.id !== id));
+  };
+
+  // fetchWithAuth wrapper
+  const fetchWithAuth = useCallback(async (path, options = {}) => {
+    try {
+      return await apiFetch(path, options, token);
+    } catch(err) {
+      if (err.message === "UNAUTHORIZED") {
+        onLogout();
+      }
+      throw err;
+    }
+  }, [token, onLogout]);
+
+  // Load findings from DB or mock fallback
+  const loadFindings = useCallback(async () => {
+    try {
+      const data = await fetchWithAuth("/api/scan/findings");
+      if (data.findings && data.findings.length > 0) {
+        setFindings(data.findings);
+        setStats({
+          total: data.total,
+          critical: data.critical,
+          high: data.high,
+          medium: data.medium,
+          low: data.low,
+          risk_score: data.risk_score
+        });
+      } else {
+        // Returned empty - load mock
+        setFindings(MOCK_FINDINGS);
+        setStats(MOCK_STATS);
+      }
+    } catch(err) {
+      // Failed - load mock
+      setFindings(MOCK_FINDINGS);
+      setStats(MOCK_STATS);
+      showToast("Cannot connect to SQLite server. Showing offline Mock Data.", "warning");
+    }
+  }, [fetchWithAuth]);
+
+  // Load User Profile
+  const loadProfile = useCallback(async () => {
+    try {
+      const data = await fetchWithAuth("/api/auth/me");
+      setProfile(data);
+    } catch(err) {}
+  }, [fetchWithAuth]);
+
+  useEffect(() => {
+    loadProfile();
+    loadFindings();
+  }, [loadProfile, loadFindings]);
+
+  // Trigger scan execution
+  const executeScan = async () => {
+    setScanning(true);
+    try {
+      const res = await fetchWithAuth("/api/scan/run", { method: "POST" });
+      setFindings(res.findings || []);
+      setStats({
+        total: res.total,
+        critical: res.critical,
+        high: res.high,
+        medium: res.medium,
+        low: res.low,
+        risk_score: res.risk_score
+      });
+      showToast("Security scan run completed successfully.", "success");
+    } catch(err) {
+      showToast(err.message || "Live scan execution failed. Using mock scans.");
+      // fallback scan trigger
+      await new Promise(r => setTimeout(r, 1500));
+      setFindings(MOCK_FINDINGS);
+      setStats(MOCK_STATS);
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const handleFindingsAskAI = (remedyText) => {
+    setPreChatText(remedyText);
+    setIsPreChatTriggered(true);
+  };
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-slate-50">
+      {/* Toast notifications */}
+      {toasts.map(t => (
+        <Toast key={t.id} message={t.message} type={t.type} onClose={() => removeToast(t.id)}/>
+      ))}
+
+      {/* Sidebar Navigation */}
+      <aside className={`bg-brand text-white flex flex-col h-full transition-all duration-300 flex-shrink-0 select-none
+        ${sidebarCollapsed ? "w-16" : "w-60"}`}>
+        <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-3 overflow-hidden">
+            <span className="text-2xl leading-none">🛡️</span>
+            {!sidebarCollapsed && (
+              <div>
+                <p className="font-extrabold text-sm leading-tight tracking-wider">ShieldScan</p>
+                <p className="text-[10px] text-brand-light/70 font-semibold tracking-widest uppercase">CNAPP System</p>
+              </div>
+            )}
+          </div>
+          <button onClick={() => setSidebarCollapsed(!sidebarCollapsed)} className="text-white/60 hover:text-white hidden sm:block">
+            {sidebarCollapsed ? "→" : "←"}
+          </button>
+        </div>
+        
+        <nav className="flex-1 p-3 overflow-y-auto scrollbar">
+          {NAV_GROUPS.map((g) => (
+            <div key={g.group} className="mb-5">
+              {!sidebarCollapsed && (
+                <p className="text-[9px] font-bold text-brand-light/50 uppercase tracking-widest px-2.5 mb-2">{g.group}</p>
+              )}
+              {g.items.map((item) => (
+                <button key={item.id} onClick={() => setCurrentTab(item.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold tracking-wide transition-all mb-1 select-none
+                    ${currentTab === item.id 
+                      ? "bg-white/15 text-white shadow" 
+                      : "text-brand-light/75 hover:bg-white/5 hover:text-white"}`}
+                  title={item.label}>
+                  <span className="text-sm leading-none">{item.icon}</span>
+                  {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
+                </button>
+              ))}
+            </div>
+          ))}
+        </nav>
+
+        {/* User Card */}
+        <div className="p-3 border-t border-white/10 flex-shrink-0 bg-brand-hover">
+          <div className="flex items-center gap-3 overflow-hidden">
+            <div className="w-8 h-8 rounded-xl bg-white/15 border border-white/10 flex items-center justify-center font-extrabold text-white text-xs select-none">
+              {((profile.full_name || profile.email || "U")[0]).toUpperCase()}
+            </div>
+            {!sidebarCollapsed && (
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold truncate leading-tight">{profile.full_name || "User Account"}</p>
+                <p className="text-[9px] text-brand-light/65 truncate font-semibold mt-0.5">{profile.email}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </aside>
+
+      {/* Main Panel */}
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+        {/* Top Header */}
+        <header className="flex-shrink-0 flex items-center justify-between px-6 py-4 bg-white border-b border-slate-200/80 shadow-sm z-10">
+          <div>
+            <h1 className="text-base font-extrabold text-slate-800 tracking-tight">
+              {NAV_GROUPS.flatMap(g => g.items).find(i => i.id === currentTab)?.label || "Overview"}
+            </h1>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 bg-slate-50 border border-slate-200/60 rounded-lg px-2.5 py-1.5 select-none">
+              <span className={`w-2 h-2 rounded-full ${profile.aws_connected ? 'bg-emerald-500' : 'bg-amber-500'} inline-block`}></span>
+              {profile.aws_connected ? "AWS Live Connected" : "AWS Offline mode"}
+            </div>
+            <button onClick={onLogout}
+              className="px-3 py-1.5 border border-slate-200 text-[10px] font-bold text-slate-500 hover:text-slate-700 rounded-lg hover:bg-slate-50 transition-colors select-none">
+              Sign out
+            </button>
+          </div>
+        </header>
+
+        {/* Dynamic Views */}
+        <main className="flex-1 overflow-y-auto scrollbar p-6 min-h-0">
+          {currentTab === "dashboard"  && <DashboardPage stats={stats} findings={findings} onAskAI={handleFindingsAskAI} scanning={scanning} runScan={executeScan}/>}
+          {currentTab === "findings"   && <FindingsPage findings={findings} onAskAI={handleFindingsAskAI} fetchWithAuth={fetchWithAuth} showToast={showToast}/>}
+          {currentTab === "cspm"       && <CSPMPage findings={findings}/>}
+          {currentTab === "cwpp"       && <CWPPPage findings={findings}/>}
+          {currentTab === "compliance" && <CompliancePage/>}
+          {currentTab === "inventory"  && <InventoryPage/>}
+          {currentTab === "reports"    && <ReportsPage findings={findings} stats={stats} showToast={showToast}/>}
+          {currentTab === "ai"         && <div className="h-[calc(100vh-140px)]"><AIAssistantPage fetchWithAuth={fetchWithAuth} showToast={showToast}/></div>}
+          {currentTab === "settings"   && <SettingsPage userProfile={profile} onUpdateProfile={setProfile} showToast={showToast} fetchWithAuth={fetchWithAuth}/>}
+        </main>
+      </div>
+
+      {/* Floating Chat Widget */}
+      <FloatWidget fetchWithAuth={fetchWithAuth} showToast={showToast}
+        isPreloaded={isPreChatTriggered} preloadedText={preChatText} clearPreload={() => { setPreChatText(null); setIsPreChatTriggered(false); }}/>
+    </div>
+  );
+}
+
+// ── ROOT ELEMENT ─────────────────────────────────────────────────────────────
+function App() {
+  const [token, setToken] = useState(null); // JWT token purely in state
+  const [authPage, setAuthPage] = useState("login");
+  const [toasts, setToasts] = useState([]);
+
+  const showToast = (message) => {
+    const id = Date.now();
+    setToasts(p => [...p, { id, message }]);
+  };
+
+  const removeToast = (id) => {
+    setToasts(p => p.filter(t => t.id !== id));
+  };
+
+  if (!token) {
+    return (
+      <div className="relative">
+        {toasts.map(t => (
+          <Toast key={t.id} message={t.message} type="error" onClose={() => removeToast(t.id)}/>
+        ))}
+        {authPage === "login" ? (
+          <LoginPage onLogin={setToken} onGoSignup={() => setAuthPage("signup")} showToast={showToast}/>
+        ) : (
+          <SignupPage onSignup={setToken} onGoLogin={() => setAuthPage("login")} showToast={showToast}/>
+        )}
+      </div>
+    );
+  }
+
+  return <MainApp token={token} onLogout={() => setToken(null)}/>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
