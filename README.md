@@ -206,6 +206,86 @@ A scheduled daily rescan runs against the latest image to catch newly disclosed 
 
 ---
 
+## Testing & Validation with CNAPPgoat
+
+### Overview
+
+ShieldScan validates its detection capabilities against **CNAPPgoat**, an open-source project that provisions vulnerable-by-design cloud infrastructure in AWS. This allows the security team to benchmark ShieldScan's ability to identify real-world misconfigurations and vulnerabilities that attackers can exploit.
+
+### What is CNAPPgoat?
+
+CNAPPgoat is a modular, open-source framework designed to provision vulnerable CNAPP (Cloud-Native Application Protection Platform) scenarios across cloud providers (AWS, Azure, GCP). Unlike general cloud security testing tools like CloudGoat, CNAPPgoat includes atomic and integrated vulnerable scenarios that provide comprehensive coverage of cloud infrastructure configurations and risks.
+
+### Supported Modules
+
+CNAPPgoat provides three CNAPP modules; ShieldScan validates against the following two:
+
+| Module | Coverage | ShieldScan Integration |
+|---|---|---|
+| **CSPM** | Misconfiguration of cloud infrastructure components (e.g., publicly exposed S3 buckets, overly permissive IAM policies, unencrypted databases) | ✅ Actively scanned by Prowler |
+| **CWPP** | Exposure of workloads to vulnerabilities (e.g., running end-of-life OS versions, vulnerable software versions, insecure container configurations) | ✅ Actively scanned by Trivy |
+| CIEM | Identity and entitlement management scenarios (privilege escalation, unintended role assumption) | ⬜ Not in current scope |
+
+### Validation Workflow
+
+```
+1. Provision CNAPPgoat scenario in isolated AWS sandbox account
+   │
+   ├─ CSPM scenarios: misconfigured storage, networking, IAM
+   └─ CWPP scenarios: vulnerable containers, outdated OS, exposed services
+   │
+2. Run ShieldScan (Prowler + Trivy) against CNAPPgoat environment
+   │
+   ├─ Prowler scans AWS infrastructure for CSPM findings
+   └─ Trivy scans container images and IaC for CWPP findings
+   │
+3. Validate detection accuracy
+   │
+   ├─ Confirm ShieldScan identifies known vulnerabilities
+   ├─ Measure false-positive and false-negative rates
+   └─ Quantify CSPM and CWPP coverage
+   │
+4. Document findings in ShieldScan dashboard
+   │
+5. Destroy CNAPPgoat infrastructure to prevent drift
+```
+
+### Testing Environment Setup
+
+- **Sandbox Account**: Completely isolated AWS account, separate from all production environments
+- **Isolation**: No shared resources, network connectivity, or data with business infrastructure
+- **Repeatability**: Each test scenario can be provisioned and destroyed on-demand via Infrastructure as Code
+- **Automation**: CNAPPgoat Terraform modules provision vulnerabilities declaratively
+
+### Key Metrics
+
+| Metric | Purpose |
+|---|---|
+| **CSPM Coverage** | Percentage of known misconfigurations (Prowler rules) detected in CNAPPgoat scenarios |
+| **CWPP Coverage** | Percentage of known vulnerabilities (Trivy) and insecure configs detected in container scenarios |
+| **True Positive Rate** | ShieldScan alerts that correspond to actual vulnerabilities in CNAPPgoat |
+| **False Positive Rate** | ShieldScan alerts with no corresponding vulnerability (target: < 1% noise) |
+| **Detection Latency** | Time from CNAPPgoat provision to ShieldScan finding identification |
+
+### Status & Roadmap
+
+| Phase | Component | Status |
+|---|---|---|
+| Foundation | CNAPPgoat AWS account setup | ⬜ Planned |
+| Foundation | CNAPPgoat CSPM module provisioning | ⬜ Planned |
+| Foundation | CNAPPgoat CWPP module provisioning | ⬜ Planned |
+| Phase 1 | Automated validation pipeline (trigger Prowler/Trivy on provision) | 🟡 Planned |
+| Phase 2 | Coverage report dashboard (% of scenarios detected) | 🟡 Planned |
+| Phase 3 | Continuous validation in CI/CD (run tests on every release) | ⬜ Planned |
+
+### References
+
+- **CNAPPgoat Repository**: [GitHub - CNAPPgoat](https://github.com/ermetic-research/cnappgoat)
+- **Documentation**: CNAPPgoat modules, scenario descriptions, and destruction procedures
+- **Best Practices**: All testing conducted in isolated, non-production AWS accounts only
+
+---
+
 ## Roadmap
 
 ### Phase 1 — Foundation (current)
@@ -217,6 +297,8 @@ A scheduled daily rescan runs against the latest image to catch newly disclosed 
 - [ ] Prowler operational on EC2
 - [ ] React frontend MVP
 - [ ] AI Fix Engine first integration
+- [ ] CNAPPgoat sandbox account provisioning
+- [ ] Initial CSPM + CWPP validation against CNAPPgoat
 
 ### Phase 2 — Hardening
 
@@ -225,6 +307,7 @@ A scheduled daily rescan runs against the latest image to catch newly disclosed 
 - [ ] Async scan workers (FastAPI BackgroundTasks → SQS as we scale)
 - [ ] Scan history pagination and filtering
 - [ ] Daily summary email (SES)
+- [ ] Automated CNAPPgoat validation pipeline in CI/CD
 
 ### Phase 3 — Intelligence (the differentiator)
 
@@ -232,6 +315,7 @@ A scheduled daily rescan runs against the latest image to catch newly disclosed 
 - [ ] Severity triage engine using EPSS scores (not just CVSS)
 - [ ] False-positive reduction layer (< 1% of scanner alerts are real threats)
 - [ ] Cross-source correlation (Trivy + Prowler findings on the same resource)
+- [ ] CNAPPgoat coverage dashboard (real-time detection metrics)
 
 ### Phase 4 — Scale
 
@@ -240,6 +324,7 @@ A scheduled daily rescan runs against the latest image to catch newly disclosed 
 - [ ] Webhooks for Slack, Teams, Jira
 - [ ] OAuth (Google, GitHub) instead of email and password
 - [ ] CWPP runtime monitoring (Falco integration)
+- [ ] Continuous validation against CNAPPgoat threat library
 
 ---
 
@@ -247,21 +332,23 @@ A scheduled daily rescan runs against the latest image to catch newly disclosed 
 
 | Role | Owner |
 |---|---|
-| CSPM and CWPP infrastructure, AWS deployment | Ilke Cabral |
-| Backend (FastAPI, auth, DynamoDB persistence) + AI Fix Engine | Kaushik |
-| React frontend | Frontend team member |
+| CSPM and CWPP infrastructure, AWS deployment | Ilke Cabral | Subhan |
+| Backend (FastAPI, auth, DynamoDB persistence) + AI Fix Engine | Kaushik | Ilke | Subhan | Umeruddin |
+| React frontend | Kaushik | Umeruddin |
+| CNAPP GOAT Implementation | Umeruddin | Kaushik |
 | Academic supervision | EPITA M1 Cybersecurity |
 
 ---
 
 ## Acknowledgements
 
-ShieldScan builds on two open-source projects:
+ShieldScan builds on three open-source projects:
 
 - **Trivy** by Aqua Security — container, IaC, and secret vulnerability scanner
 - **Prowler** — AWS, Azure, GCP security posture scanner
+- **CNAPPgoat** by Ermetic Research — vulnerable-by-design cloud infrastructure provisioning for CNAPP validation
 
-The research foundation comes from papers on cloud-native security, IAM anomaly detection, and CSPM effectiveness studies.
+The research foundation comes from papers on cloud-native security, IAM anomaly detection, CSPM effectiveness studies, and CNAPP threat modeling.
 
 ---
 
