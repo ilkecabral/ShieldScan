@@ -1,8 +1,8 @@
-﻿name: CWPP - IaC and Secrets Scan
+name: CWPP - IaC and Secrets Scan
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, feature/cwpp]
   pull_request:
     branches: [main]
 
@@ -25,8 +25,9 @@ jobs:
           format: sarif
           output: trivy-fs.sarif
           severity: CRITICAL,HIGH,MEDIUM
+          exit-code: '0'
 
-      - name: Upload SARIF
+      - name: Upload SARIF to Security tab
         if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
