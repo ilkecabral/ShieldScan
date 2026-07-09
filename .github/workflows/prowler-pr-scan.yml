@@ -1,0 +1,52 @@
+name: Prowler PR Scan
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev]
+
+jobs:
+  prowler-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Prowler
+        run: pip install prowler
+
+      - name: Run Prowler against AWS account
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.PROWLER_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.PROWLER_AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+        run: |
+          prowler aws \
+            --role arn:aws:iam::${{ secrets.TARGET_AWS_ACCOUNT_ID }}:role/ShieldScanReadOnlyRole \
+            --output-formats json-ocsf \
+            --output-directory prowler-results \
+            --severity critical high \
+            --status FAIL
+
+      - name: Upload Prowler results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: prowler-pr-results-${{ github.run_id }}
+          path: prowler-results/
+          retention-days: 30
+
+      - name: Gate - fail on critical misconfigurations
+        run: |
+          CRITICAL_COUNT=$(cat prowler-results/*.json | python3 -c "
+          import sys, json
+          findings = json.load(sys.stdin)
+          critical = [f for f in findings if f.get('severity', '').upper() == 'CRITICAL' and f.get('status', '').upper() == 'FAIL']
+          print(len(critical))
+          ")
+          echo "Critical misconfigurations found: $CRITICAL_COUNT"
+          if [ "$CRITICAL_COUNT" -gt 0 ]; then
+            echo "Failing build due to $CRITICAL_COUNT critical misconfigurations"
+            exit 1
+          fi
