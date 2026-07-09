@@ -1,0 +1,45 @@
+name: Prowler Daily Posture Scan
+
+on:
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+
+jobs:
+  posture-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Prowler
+        run: pip install prowler
+
+      - name: Run Prowler cross-account scan
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.PROWLER_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.PROWLER_AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+        run: |
+          prowler aws \
+            --role arn:aws:iam::${{ secrets.TARGET_AWS_ACCOUNT_ID }}:role/ShieldScanReadOnlyRole \
+            --output-formats json-ocsf \
+            --output-directory prowler-results \
+            --severity critical high medium \
+            --status FAIL
+
+      - name: Post results to ShieldScan findings API
+        run: |
+          for f in prowler-results/*.json; do
+            curl -X POST "${{ secrets.SHIELDSCAN_API_URL }}/scans/prowler/ingest" \
+              -H "Authorization: Bearer ${{ secrets.SHIELDSCAN_API_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              --data @"$f"
+          done
+
+      - name: Upload scan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: prowler-daily-scan-${{ github.run_id }}
+          path: prowler-results/
+          retention-days: 30
