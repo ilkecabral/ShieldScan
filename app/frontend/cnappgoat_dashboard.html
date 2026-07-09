@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ShieldScan - CNAPPgoat Live Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  .log-box { background:#0b1020; color:#9cf07a; font-family: ui-monospace, Menlo, monospace; font-size:12px; white-space:pre-wrap; max-height:220px; overflow-y:auto; border-radius:8px; padding:10px; }
+  .spin { animation: spin 1s linear infinite; }
+  @keyframes spin { from{transform:rotate(0)} to{transform:rotate(360deg)} }
+</style>
+</head>
+<body class="bg-gray-50">
+
+<div class="bg-gradient-to-r from-blue-600 to-purple-600 text-white py-6">
+  <div class="max-w-7xl mx-auto px-4 flex items-center justify-between">
+    <div>
+      <h1 class="text-3xl font-bold">🛡️ ShieldScan — CNAPPgoat Live Dashboard</h1>
+      <p class="text-blue-100 text-sm">Runs real cnappgoat / aws / trivy commands against your connected AWS account</p>
+    </div>
+    <div id="sysStatus" class="text-sm bg-white/10 rounded-lg px-4 py-2">Checking system...</div>
+  </div>
+</div>
+
+<div class="max-w-7xl mx-auto px-4 py-6">
+
+  <div class="flex gap-4 mb-6">
+    <button id="tab-cwpp" onclick="switchTab('cwpp')" class="px-6 py-3 rounded-lg font-semibold bg-blue-600 text-white">🐳 CWPP</button>
+    <button id="tab-cspm" onclick="switchTab('cspm')" class="px-6 py-3 rounded-lg font-semibold bg-white text-gray-700 border">☁️ CSPM</button>
+  </div>
+
+  <div id="cwpp-panel" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+  <div id="cspm-panel" class="hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+
+</div>
+
+<script>
+const API = '/cnappgoat'; // same origin
+
+const SCENARIOS = {
+  cwpp: [
+    { id: 'cwpp-aws-end-of-life-container-on-ecr', name: 'End of Life Container on ECR', severity:'High', desc:'Debian/Ubuntu EOL image with known CVEs (uses ECR).' },
+    { id: 'cwpp-aws-vulnerable-container-log4shell-on-ecr', name: 'Log4Shell on ECR', severity:'Critical', desc:'CVE-2021-44228 Log4Shell RCE (uses ECR).' },
+    { id: 'cwpp-aws-vulnerable-container-jenkins-on-ecr', name: 'Jenkins Vulnerability on ECR', severity:'High', desc:'CVE-2021-21697 (uses ECR).' },
+    { id: 'cwpp-aws-vulnerable-container-redis-on-ecr', name: 'Redis Vulnerability on ECR', severity:'High', desc:'CVE-2022-0543 (uses ECR).' },
+    { id: 'cwpp-aws-vulnerable-container-tomcat-on-ecr', name: 'Tomcat Vulnerability on ECR', severity:'Medium', desc:'CVE-2020-1938 Ghostcat (uses ECR).' },
+    { id: 'cwpp-aws-vulnerable-container-thunderbird-on-ecr', name: 'Thunderbird Vulnerability on ECR', severity:'Medium', desc:'CVE-2022-1529 (uses ECR).' },
+    { id: 'cwpp-aws-malicious-container-xmrig-on-ecr', name: 'Malicious Container xmrig on ECR', severity:'Critical', desc:'Crypto-miner malware container (uses ECR).' },
+    { id: 'cwpp-aws-malicious-ec2-xmrig', name: 'Malicious EC2 (xmrig)', severity:'Critical', desc:'EC2 instance, no ECR — deploy/destroy only, scan not applicable here.' },
+  ],
+  cspm: [
+    { id: 'ciem-aws-iam-external-id-3rd-party-role', name: 'IAM External ID Misconfiguration', severity:'High', desc:'IAM role trust policy issue (no ECR — scan N/A).' },
+    { id: 'ciem-aws-iam-weak-password', name: 'Weak IAM Password Policy', severity:'Medium', desc:'Weak password policy (no ECR — scan N/A).' },
+    { id: 'dspm-aws-s3-public-storage-basic-pii-data', name: 'S3 Public Storage (PII data)', severity:'Critical', desc:'Publicly exposed S3 bucket with PII (no ECR — scan N/A).' },
+  ]
+};
+
+let activeTab = 'cwpp';
+let pollTimers = {};
+
+function switchTab(tab){
+  activeTab = tab;
+  document.getElementById('cwpp-panel').classList.toggle('hidden', tab!=='cwpp');
+  document.getElementById('cspm-panel').classList.toggle('hidden', tab!=='cspm');
+  document.getElementById('tab-cwpp').className = 'px-6 py-3 rounded-lg font-semibold ' + (tab==='cwpp' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 border');
+  document.getElementById('tab-cspm').className = 'px-6 py-3 rounded-lg font-semibold ' + (tab==='cspm' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 border');
+}
+
+function sevColor(sev){
+  return sev==='Critical' ? 'bg-red-100 text-red-700' : sev==='High' ? 'bg-orange-100 text-orange-700' : 'bg-yellow-100 text-yellow-700';
+}
+
+function card(s){
+  return `
+  <div class="bg-white rounded-lg shadow-md p-6" id="card-${s.id}">
+    <div class="flex justify-between items-start mb-2">
+      <h3 class="text-lg font-bold text-gray-800">${s.name}</h3>
+      <span class="px-3 py-1 rounded-full text-xs font-semibold ${sevColor(s.severity)}">${s.severity}</span>
+    </div>
+    <p class="text-xs text-gray-500 mb-1 font-mono">${s.id}</p>
+    <p class="text-sm text-gray-600 mb-3">${s.desc}</p>
+
+    <div id="status-${s.id}" class="text-sm font-semibold mb-2 text-gray-500">⏳ Not deployed</div>
+    <div class="w-full bg-gray-200 rounded-full h-2 mb-3 hidden" id="bar-wrap-${s.id}">
+      <div class="bg-blue-600 h-2 rounded-full" style="width:5%" id="bar-${s.id}"></div>
+    </div>
+
+    <div id="vulns-${s.id}" class="hidden mb-3 p-3 bg-gray-50 rounded-lg text-sm"></div>
+
+    <div class="flex gap-2 mb-2">
+      <button onclick="deploy('${s.id}')" id="btn-deploy-${s.id}" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded font-semibold text-sm">🚀 Deploy</button>
+      <button onclick="scan('${s.id}')" id="btn-scan-${s.id}" class="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded font-semibold text-sm opacity-50 cursor-not-allowed" disabled>🔍 Scan</button>
+      <button onclick="destroy('${s.id}')" id="btn-destroy-${s.id}" class="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded font-semibold text-sm opacity-50 cursor-not-allowed" disabled>🗑️ Destroy</button>
+    </div>
+
+    <details class="mt-1">
+      <summary class="text-xs text-gray-400 cursor-pointer">View live command log</summary>
+      <div class="log-box mt-2" id="log-${s.id}">(no output yet)</div>
+    </details>
+  </div>`;
+}
+
+function renderAll(){
+  document.getElementById('cwpp-panel').innerHTML = SCENARIOS.cwpp.map(card).join('');
+  document.getElementById('cspm-panel').innerHTML = SCENARIOS.cspm.map(card).join('');
+}
+
+async function checkSystem(){
+  try {
+    const r = await fetch(API + '/api/system-status');
+    const d = await r.json();
+    const el = document.getElementById('sysStatus');
+    if (d.aws_connected && d.cnappgoat_ok && d.trivy_ok) {
+      el.innerHTML = `✅ AWS: ${d.aws_account} · cnappgoat ✓ · trivy ✓`;
+    } else {
+      el.innerHTML = `⚠️ AWS:${d.aws_connected?'✓':'✗'} cnappgoat:${d.cnappgoat_ok?'✓':'✗'} trivy:${d.trivy_ok?'✓':'✗'}`;
+    }
+  } catch(e) {
+    document.getElementById('sysStatus').innerHTML = '❌ Cannot reach backend server';
+  }
+}
+
+async function deploy(id){
+  setButtons(id, {deploy:false, scan:false, destroy:false});
+  document.getElementById('status-'+id).textContent = '🚀 Deploying... (this can take 5-10 min)';
+  document.getElementById('bar-wrap-'+id).classList.remove('hidden');
+  await fetch(API + '/api/deploy', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({scenario_id:id})});
+  poll(id);
+}
+
+async function scan(id){
+  document.getElementById('status-'+id).textContent = '🔍 Scanning image with Trivy / ECR...';
+  setButtons(id, {deploy:false, scan:false, destroy:false});
+  await fetch(API + '/api/scan', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({scenario_id:id})});
+  poll(id);
+}
+
+async function destroy(id){
+  if(!confirm('Destroy ' + id + '? This removes all AWS resources for this scenario.')) return;
+  document.getElementById('status-'+id).textContent = '🗑️ Destroying...';
+  setButtons(id, {deploy:false, scan:false, destroy:false});
+  await fetch(API + '/api/destroy', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({scenario_id:id})});
+  poll(id);
+}
+
+function setButtons(id, {deploy, scan, destroy}){
+  const d = document.getElementById('btn-deploy-'+id);
+  const s = document.getElementById('btn-scan-'+id);
+  const x = document.getElementById('btn-destroy-'+id);
+  [[d,deploy],[s,scan],[x,destroy]].forEach(([btn,enabled])=>{
+    btn.disabled = !enabled;
+    btn.classList.toggle('opacity-50', !enabled);
+    btn.classList.toggle('cursor-not-allowed', !enabled);
+  });
+}
+
+function renderVulns(id, vulns, cves){
+  const box = document.getElementById('vulns-'+id);
+  box.classList.remove('hidden');
+  let html = '';
+  ['CRITICAL','HIGH','MEDIUM','LOW'].forEach(k=>{
+    const icon = k==='CRITICAL'?'🔴':k==='HIGH'?'🟠':k==='MEDIUM'?'🟡':'🟢';
+    html += `<p class="font-semibold">${icon} ${k}: ${vulns[k] ?? 0}</p>`;
+  });
+  if (cves && cves.length){
+    html += `<p class="text-xs text-gray-500 mt-2">${cves.slice(0,5).join(', ')}</p>`;
+  }
+  box.innerHTML = html;
+}
+
+async function poll(id){
+  if (pollTimers[id]) clearInterval(pollTimers[id]);
+  pollTimers[id] = setInterval(async ()=>{
+    try {
+      const r = await fetch(API + '/api/scenario-status/' + id);
+      const st = await r.json();
+      document.getElementById('log-'+id).textContent = st.log || '(no output yet)';
+      const box = document.getElementById('log-'+id);
+      box.scrollTop = box.scrollHeight;
+
+      const statusEl = document.getElementById('status-'+id);
+      const barWrap = document.getElementById('bar-wrap-'+id);
+      const bar = document.getElementById('bar-'+id);
+
+      if (st.status === 'deploying') {
+        statusEl.textContent = '🚀 Deploying...';
+        barWrap.classList.remove('hidden');
+        bar.style.width = Math.min(90, (bar.style.width ? parseInt(bar.style.width)+5 : 10)) + '%';
+      } else if (st.status === 'deployed') {
+        statusEl.textContent = '✅ Deployed';
+        barWrap.classList.add('hidden');
+        setButtons(id, {deploy:false, scan:true, destroy:true});
+        clearInterval(pollTimers[id]);
+      } else if (st.status === 'scanning') {
+        statusEl.textContent = '🔍 Scanning...';
+      } else if (st.status === 'scanned') {
+        statusEl.textContent = '✅ Scan complete';
+        renderVulns(id, st.vulnerabilities || {}, st.cves || []);
+        setButtons(id, {deploy:false, scan:true, destroy:true});
+        clearInterval(pollTimers[id]);
+      } else if (st.status === 'destroying') {
+        statusEl.textContent = '🗑️ Destroying...';
+      } else if (st.status === 'error') {
+        statusEl.textContent = '❌ Error: ' + (st.error || 'unknown error');
+        setButtons(id, {deploy:true, scan:!!st.repo_url, destroy:true});
+        clearInterval(pollTimers[id]);
+      } else if (st.status === 'not_deployed') {
+        statusEl.textContent = '⏳ Not deployed';
+        barWrap.classList.add('hidden');
+        setButtons(id, {deploy:true, scan:false, destroy:false});
+        clearInterval(pollTimers[id]);
+      }
+    } catch(e) {
+      // backend unreachable mid-poll; stop trying
+      clearInterval(pollTimers[id]);
+    }
+  }, 2000);
+}
+
+renderAll();
+checkSystem();
+setInterval(checkSystem, 15000);
+</script>
+</body>
+</html>

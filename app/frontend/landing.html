@@ -1,0 +1,1629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ShieldScan — Cloud Security for Developers Who Can't Afford to Ignore It</title>
+  <meta name="description" content="ShieldScan scans your AWS account and container images for security problems. Free for students and early-stage startups. No credit card required." />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0f172a;
+      --surface:  #1e293b;
+      --border:   #334155;
+      --text:     #f1f5f9;
+      --muted:    #94a3b8;
+      --accent:   #6366f1;
+      --accent2:  #818cf8;
+      --green:    #22c55e;
+      --red:      #ef4444;
+      --orange:   #f97316;
+      --yellow:   #eab308;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      font-size: 16px;
+    }
+
+    a { color: inherit; text-decoration: none; }
+    img { display: block; max-width: 100%; }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* ── NAV ──────────────────────────────────────────────────────────── */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(15, 23, 42, 0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 0;
+    }
+
+    .nav-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 1.15rem;
+      letter-spacing: -0.3px;
+    }
+
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, var(--accent), #818cf8);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 28px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--muted);
+      font-size: .9rem;
+      font-weight: 500;
+      transition: color .15s;
+    }
+
+    .nav-links a:hover { color: var(--text); }
+
+    .nav-cta {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 20px;
+      border-radius: 8px;
+      font-size: .875rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all .15s;
+      white-space: nowrap;
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+
+    .btn-ghost:hover {
+      color: var(--text);
+      border-color: var(--accent);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .btn-primary:hover { background: var(--accent2); transform: translateY(-1px); }
+
+    .btn-lg {
+      padding: 13px 28px;
+      font-size: 1rem;
+    }
+
+    /* ── HERO ─────────────────────────────────────────────────────────── */
+    .hero {
+      padding: 96px 0 80px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: -200px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 800px;
+      height: 800px;
+      background: radial-gradient(circle, rgba(99,102,241,.18) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 14px;
+      border-radius: 20px;
+      border: 1px solid rgba(99,102,241,.4);
+      background: rgba(99,102,241,.1);
+      color: var(--accent2);
+      font-size: .8rem;
+      font-weight: 600;
+      margin-bottom: 28px;
+      letter-spacing: .3px;
+    }
+
+    .hero h1 {
+      font-size: clamp(2.2rem, 5vw, 3.6rem);
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: -1px;
+      max-width: 800px;
+      margin: 0 auto 22px;
+    }
+
+    .hero h1 span {
+      background: linear-gradient(135deg, var(--accent2), #a5b4fc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-sub {
+      font-size: 1.15rem;
+      color: var(--muted);
+      max-width: 580px;
+      margin: 0 auto 40px;
+      line-height: 1.7;
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 14px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 56px;
+    }
+
+    .hero-note {
+      font-size: .8rem;
+      color: #475569;
+      margin-top: 12px;
+    }
+
+    /* ── TERMINAL MOCKUP ──────────────────────────────────────────────── */
+    .terminal {
+      max-width: 680px;
+      margin: 0 auto;
+      background: #0a0f1e;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      text-align: left;
+      box-shadow: 0 40px 80px rgba(0,0,0,.5);
+    }
+
+    .terminal-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .dot { width: 12px; height: 12px; border-radius: 50%; }
+    .dot-r { background: #ef4444; }
+    .dot-y { background: #eab308; }
+    .dot-g { background: #22c55e; }
+    .terminal-title { margin-left: 8px; font-size: .75rem; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+
+    .terminal-body {
+      padding: 22px 24px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .8rem;
+      line-height: 1.8;
+    }
+
+    .t-prompt { color: #22c55e; }
+    .t-cmd { color: var(--text); }
+    .t-info { color: var(--muted); }
+    .t-warn { color: var(--orange); }
+    .t-crit { color: var(--red); }
+    .t-ok { color: var(--green); }
+    .t-score { color: var(--accent2); font-weight: 600; }
+
+    /* ── LOGOS / SOCIAL PROOF ─────────────────────────────────────────── */
+    .social-proof {
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 28px 0;
+      text-align: center;
+    }
+
+    .social-proof p {
+      font-size: .8rem;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin-bottom: 20px;
+    }
+
+    .proof-logos {
+      display: flex;
+      justify-content: center;
+      gap: 40px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .proof-logo {
+      color: #475569;
+      font-weight: 700;
+      font-size: .9rem;
+      letter-spacing: .5px;
+    }
+
+    /* ── SECTIONS ─────────────────────────────────────────────────────── */
+    section { padding: 88px 0; }
+
+    .section-label {
+      display: inline-block;
+      font-size: .75rem;
+      font-weight: 700;
+      color: var(--accent2);
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-bottom: 14px;
+    }
+
+    .section-title {
+      font-size: clamp(1.7rem, 3.5vw, 2.4rem);
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      line-height: 1.2;
+      margin-bottom: 16px;
+    }
+
+    .section-sub {
+      color: var(--muted);
+      font-size: 1.05rem;
+      max-width: 540px;
+      line-height: 1.7;
+    }
+
+    /* ── PROBLEM / BEFORE ─────────────────────────────────────────────── */
+    .problem { background: var(--surface); }
+
+    .problem-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 48px;
+      align-items: center;
+    }
+
+    .problem-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      margin-top: 32px;
+    }
+
+    .problem-item {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+    }
+
+    .problem-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .problem-icon.red { background: rgba(239,68,68,.15); color: var(--red); }
+    .problem-icon.orange { background: rgba(249,115,22,.15); color: var(--orange); }
+    .problem-icon.yellow { background: rgba(234,179,8,.15); color: var(--yellow); }
+
+    .problem-item p {
+      font-size: .95rem;
+      color: var(--muted);
+    }
+
+    .problem-item strong { color: var(--text); display: block; margin-bottom: 3px; }
+
+    .cost-card {
+      background: #0a0f1e;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 32px;
+    }
+
+    .cost-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: .9rem;
+    }
+
+    .cost-row:last-child { border-bottom: none; }
+    .cost-label { color: var(--muted); }
+    .cost-val { font-weight: 700; }
+    .cost-val.red { color: var(--red); }
+    .cost-val.green { color: var(--green); }
+
+    .cost-total {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 2px solid var(--accent);
+      display: flex;
+      justify-content: space-between;
+      font-weight: 800;
+      font-size: 1.1rem;
+    }
+
+    /* ── FEATURES ─────────────────────────────────────────────────────── */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      margin-top: 56px;
+    }
+
+    .feature-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px;
+      transition: border-color .2s, transform .2s;
+    }
+
+    .feature-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-3px);
+    }
+
+    .feature-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      margin-bottom: 20px;
+    }
+
+    .fi-purple { background: rgba(99,102,241,.15); }
+    .fi-blue   { background: rgba(59,130,246,.15); }
+    .fi-green  { background: rgba(34,197,94,.15); }
+    .fi-orange { background: rgba(249,115,22,.15); }
+    .fi-red    { background: rgba(239,68,68,.15); }
+    .fi-pink   { background: rgba(236,72,153,.15); }
+
+    .feature-card h3 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    .feature-card p {
+      font-size: .88rem;
+      color: var(--muted);
+      line-height: 1.65;
+    }
+
+    .feature-tag {
+      display: inline-block;
+      margin-top: 14px;
+      font-size: .7rem;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 20px;
+      background: rgba(99,102,241,.15);
+      color: var(--accent2);
+      letter-spacing: .5px;
+    }
+
+    /* ── HOW IT WORKS ─────────────────────────────────────────────────── */
+    .how { background: var(--surface); }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0;
+      margin-top: 56px;
+      position: relative;
+    }
+
+    .steps::before {
+      content: '';
+      position: absolute;
+      top: 28px;
+      left: calc(12.5%);
+      right: calc(12.5%);
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      z-index: 0;
+    }
+
+    .step {
+      text-align: center;
+      padding: 0 16px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .step-num {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 1.1rem;
+      margin: 0 auto 20px;
+      position: relative;
+    }
+
+    .step h3 {
+      font-size: .95rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    .step p {
+      font-size: .83rem;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    /* ── SCAN RESULTS DEMO ────────────────────────────────────────────── */
+    .demo-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      margin-top: 56px;
+      align-items: start;
+    }
+
+    .finding-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .finding-hd {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: .85rem;
+      font-weight: 600;
+    }
+
+    .sev {
+      display: inline-block;
+      padding: 2px 9px;
+      border-radius: 4px;
+      font-size: .7rem;
+      font-weight: 700;
+    }
+
+    .sev-critical { background: rgba(239,68,68,.2); color: var(--red); }
+    .sev-high { background: rgba(249,115,22,.2); color: var(--orange); }
+    .sev-medium { background: rgba(234,179,8,.2); color: var(--yellow); }
+
+    .finding-body { padding: 16px 18px; font-size: .83rem; color: var(--muted); line-height: 1.6; }
+    .finding-fix { padding: 12px 18px; background: rgba(34,197,94,.06); border-top: 1px solid var(--border); font-size: .78rem; color: var(--green); }
+    .finding-fix strong { display: block; margin-bottom: 3px; color: var(--green); }
+
+    .score-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 28px;
+    }
+
+    .score-big {
+      font-size: 4rem;
+      font-weight: 800;
+      line-height: 1;
+      background: linear-gradient(135deg, var(--orange), var(--red));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .score-label { font-size: .8rem; color: var(--muted); margin-top: 6px; margin-bottom: 24px; }
+
+    .score-bar-wrap { margin-bottom: 14px; }
+    .score-bar-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: .78rem;
+      margin-bottom: 5px;
+    }
+    .score-bar-label span:first-child { color: var(--muted); }
+    .score-bar-label span:last-child { font-weight: 600; }
+
+    .bar-bg {
+      height: 6px;
+      background: rgba(255,255,255,.08);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .bar-fill { height: 100%; border-radius: 3px; }
+
+    /* ── COMPLIANCE ───────────────────────────────────────────────────── */
+    .compliance-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 40px;
+      margin-top: 56px;
+      align-items: center;
+    }
+
+    .framework-list {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .framework-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 18px;
+    }
+
+    .fw-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      background: rgba(99,102,241,.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .fw-name { font-weight: 700; font-size: .9rem; }
+    .fw-desc { font-size: .78rem; color: var(--muted); margin-top: 2px; }
+
+    .fw-progress {
+      margin-left: auto;
+      text-align: right;
+    }
+
+    .fw-pct { font-weight: 800; font-size: 1rem; }
+    .fw-pct.green { color: var(--green); }
+    .fw-pct.yellow { color: var(--yellow); }
+    .fw-pct.red { color: var(--red); }
+
+    /* ── AI ASSISTANT ─────────────────────────────────────────────────── */
+    .ai-section { background: var(--surface); }
+
+    .chat-demo {
+      background: #0a0f1e;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      max-width: 560px;
+    }
+
+    .chat-bar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 18px;
+      font-size: .8rem;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .chat-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--green);
+      border-radius: 50%;
+    }
+
+    .chat-msgs { padding: 20px 18px; display: flex; flex-direction: column; gap: 16px; }
+
+    .msg { display: flex; gap: 12px; align-items: flex-start; }
+
+    .msg-avatar {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .msg-avatar.user { background: rgba(99,102,241,.25); color: var(--accent2); }
+    .msg-avatar.ai { background: rgba(34,197,94,.2); color: var(--green); }
+
+    .msg-bubble {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: .83rem;
+      line-height: 1.6;
+      color: var(--muted);
+      max-width: 400px;
+    }
+
+    .msg-bubble.user { background: rgba(99,102,241,.12); color: var(--text); }
+    .msg-bubble code {
+      font-family: 'JetBrains Mono', monospace;
+      background: rgba(255,255,255,.08);
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: .75rem;
+    }
+
+    /* ── PRICING ──────────────────────────────────────────────────────── */
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      margin-top: 56px;
+    }
+
+    .price-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 32px 28px;
+      position: relative;
+    }
+
+    .price-card.featured {
+      border-color: var(--accent);
+      background: rgba(99,102,241,.06);
+    }
+
+    .price-popular {
+      position: absolute;
+      top: -14px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--accent);
+      color: #fff;
+      font-size: .7rem;
+      font-weight: 700;
+      padding: 4px 14px;
+      border-radius: 20px;
+      letter-spacing: .5px;
+    }
+
+    .price-tier { font-size: .8rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 12px; }
+
+    .price-amount {
+      font-size: 2.6rem;
+      font-weight: 800;
+      line-height: 1;
+      margin-bottom: 6px;
+    }
+
+    .price-period { font-size: .85rem; color: var(--muted); margin-bottom: 24px; }
+
+    .price-features {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 11px;
+      margin-bottom: 32px;
+    }
+
+    .price-features li {
+      display: flex;
+      gap: 10px;
+      font-size: .88rem;
+      align-items: flex-start;
+    }
+
+    .price-features li::before {
+      content: '✓';
+      color: var(--green);
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .price-features li.off { color: var(--muted); }
+    .price-features li.off::before { content: '—'; color: var(--border); }
+
+    /* ── STACK / TECH ─────────────────────────────────────────────────── */
+    .stack-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 14px;
+      margin-top: 48px;
+    }
+
+    .stack-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 14px;
+      text-align: center;
+    }
+
+    .stack-icon { font-size: 28px; margin-bottom: 10px; }
+    .stack-name { font-size: .75rem; font-weight: 600; color: var(--muted); }
+
+    /* ── TEAM ─────────────────────────────────────────────────────────── */
+    .team-section { background: var(--surface); }
+
+    .team-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+      margin-top: 48px;
+    }
+
+    .team-card {
+      background: #0a0f1e;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px 20px;
+      text-align: center;
+    }
+
+    .team-avatar {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.6rem;
+      font-weight: 800;
+      margin: 0 auto 14px;
+      color: #fff;
+    }
+
+    .team-name { font-weight: 700; font-size: .95rem; margin-bottom: 4px; }
+    .team-role { font-size: .78rem; color: var(--accent2); margin-bottom: 8px; }
+    .team-bio { font-size: .78rem; color: var(--muted); line-height: 1.55; }
+
+    .epita-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 40px;
+      padding: 10px 20px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: .83rem;
+      color: var(--muted);
+    }
+
+    /* ── FAQ ──────────────────────────────────────────────────────────── */
+    .faq-list {
+      max-width: 720px;
+      margin: 48px auto 0;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .faq-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 22px 24px;
+    }
+
+    .faq-q {
+      font-weight: 700;
+      font-size: .95rem;
+      margin-bottom: 10px;
+    }
+
+    .faq-a {
+      font-size: .88rem;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    .faq-a code {
+      font-family: 'JetBrains Mono', monospace;
+      background: rgba(255,255,255,.08);
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: .78rem;
+    }
+
+    /* ── CTA ──────────────────────────────────────────────────────────── */
+    .cta-section {
+      text-align: center;
+      padding: 100px 0;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .cta-section::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 700px;
+      height: 400px;
+      background: radial-gradient(ellipse, rgba(99,102,241,.2) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .cta-section h2 {
+      font-size: clamp(1.8rem, 4vw, 2.8rem);
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 16px;
+    }
+
+    .cta-section p {
+      color: var(--muted);
+      font-size: 1.05rem;
+      max-width: 480px;
+      margin: 0 auto 36px;
+    }
+
+    /* ── FOOTER ───────────────────────────────────────────────────────── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 40px 0;
+    }
+
+    .footer-inner {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .footer-left { font-size: .83rem; color: var(--muted); }
+    .footer-right { display: flex; gap: 20px; }
+    .footer-right a { font-size: .83rem; color: var(--muted); transition: color .15s; }
+    .footer-right a:hover { color: var(--text); }
+
+    /* ── RESPONSIVE ───────────────────────────────────────────────────── */
+    @media (max-width: 900px) {
+      .features-grid { grid-template-columns: 1fr 1fr; }
+      .steps { grid-template-columns: 1fr 1fr; }
+      .steps::before { display: none; }
+      .demo-grid { grid-template-columns: 1fr; }
+      .compliance-grid { grid-template-columns: 1fr; }
+      .pricing-grid { grid-template-columns: 1fr; max-width: 420px; margin-left: auto; margin-right: auto; }
+      .stack-grid { grid-template-columns: repeat(3, 1fr); }
+      .team-grid { grid-template-columns: 1fr 1fr; }
+      .problem-grid { grid-template-columns: 1fr; }
+      .nav-links { display: none; }
+    }
+
+    @media (max-width: 600px) {
+      .features-grid { grid-template-columns: 1fr; }
+      .steps { grid-template-columns: 1fr; }
+      .stack-grid { grid-template-columns: repeat(2, 1fr); }
+      .team-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── NAV ──────────────────────────────────────────────────────────────── -->
+<nav>
+  <div class="nav-inner">
+    <a class="logo" href="#">
+      <div class="logo-icon">🛡️</div>
+      ShieldScan
+    </a>
+    <ul class="nav-links">
+      <li><a href="#features">Features</a></li>
+      <li><a href="#how-it-works">How it works</a></li>
+      <li><a href="#compliance">Compliance</a></li>
+      <li><a href="#pricing">Pricing</a></li>
+      <li><a href="#team">Team</a></li>
+    </ul>
+    <div class="nav-cta">
+      <a class="btn btn-ghost" href="/index.html">Sign in</a>
+      <a class="btn btn-primary" href="/index.html#register">Get started free</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ── HERO ─────────────────────────────────────────────────────────────── -->
+<section class="hero">
+  <div class="container">
+    <div class="badge">🎓 Built at EPITA Paris &mdash; MSc Computer Security</div>
+    <h1>Cloud security that doesn't<br/><span>require an enterprise budget</span></h1>
+    <p class="hero-sub">
+      ShieldScan scans your AWS account and Docker containers for misconfigurations and vulnerabilities. You get a risk score, a list of exactly what's wrong, and instructions to fix it. No dashboards you'll never read.
+    </p>
+    <div class="hero-actions">
+      <a class="btn btn-primary btn-lg" href="/index.html#register">Start scanning free</a>
+      <a class="btn btn-ghost btn-lg" href="#how-it-works">See how it works</a>
+    </div>
+    <p class="hero-note">Free for students &amp; startups &nbsp;·&nbsp; No credit card &nbsp;·&nbsp; AWS free-tier compatible</p>
+
+    <!-- Terminal mockup -->
+    <div class="terminal">
+      <div class="terminal-bar">
+        <span class="dot dot-r"></span>
+        <span class="dot dot-y"></span>
+        <span class="dot dot-g"></span>
+        <span class="terminal-title">ShieldScan &mdash; Live Scan</span>
+      </div>
+      <div class="terminal-body">
+        <div><span class="t-prompt">$</span> <span class="t-cmd">shieldscan run --aws-profile default --image nginx:latest</span></div>
+        <div class="t-info">&nbsp;</div>
+        <div class="t-info">[1/6] Scanning S3 bucket permissions...</div>
+        <div class="t-warn">&nbsp;&nbsp;WARN  s3://my-startup-assets — public access not blocked</div>
+        <div class="t-info">[2/6] Checking IAM root account...</div>
+        <div class="t-crit">&nbsp;&nbsp;CRIT  Root account has active access keys</div>
+        <div class="t-info">[3/6] Checking IAM users for MFA...</div>
+        <div class="t-warn">&nbsp;&nbsp;WARN  IAM user 'devuser' has access keys but no MFA</div>
+        <div class="t-info">[4/6] Scanning EC2 security groups...</div>
+        <div class="t-crit">&nbsp;&nbsp;CRIT  sg-0abc1234 — SSH (port 22) open to 0.0.0.0/0</div>
+        <div class="t-info">[5/6] Running container scan on nginx:latest...</div>
+        <div class="t-warn">&nbsp;&nbsp;HIGH  CVE-2023-44487 in libssl — fix in nginx:1.25.3</div>
+        <div class="t-info">[6/6] Scoring findings...</div>
+        <div class="t-info">&nbsp;</div>
+        <div><span class="t-score">Risk Score: 72 / 100 &nbsp;&nbsp;|&nbsp;&nbsp; 3 CRITICAL &nbsp; 4 HIGH &nbsp; 2 MEDIUM</span></div>
+        <div class="t-info">Report saved. &nbsp;<span style="color:#6366f1">→ View in dashboard</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── SOCIAL PROOF ──────────────────────────────────────────────────────── -->
+<div class="social-proof">
+  <div class="container">
+    <p>Built on industry-standard tools</p>
+    <div class="proof-logos">
+      <span class="proof-logo">Amazon Web Services</span>
+      <span class="proof-logo">Trivy (Aqua Security)</span>
+      <span class="proof-logo">FastAPI</span>
+      <span class="proof-logo">XGBoost</span>
+      <span class="proof-logo">Claude AI</span>
+      <span class="proof-logo">CIS Benchmark v1.5</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── PROBLEM ───────────────────────────────────────────────────────────── -->
+<section class="problem">
+  <div class="container">
+    <div class="problem-grid">
+      <div>
+        <span class="section-label">The problem</span>
+        <h2 class="section-title">Most security tools assume you already have a security team</h2>
+        <p class="section-sub">
+          The tools that actually work &mdash; Wiz, Orca, Prisma Cloud &mdash; start at $15,000 a year. AWS Security Hub gets you part of the way there, but you still have to interpret 200-page reports with no context. ShieldScan is for everyone else.
+        </p>
+
+        <ul class="problem-list">
+          <li class="problem-item">
+            <div class="problem-icon red">💸</div>
+            <div>
+              <strong>Enterprise tools charge enterprise prices</strong>
+              <p>Wiz costs roughly $15k/year. Orca is similar. AWS Security Hub adds up fast once you leave the free tier. None of that is realistic for a student project or a two-person startup.</p>
+            </div>
+          </li>
+          <li class="problem-item">
+            <div class="problem-icon orange">🤯</div>
+            <div>
+              <strong>Audit reports that nobody reads</strong>
+              <p>Most CSPM tools dump findings into a spreadsheet and leave you to figure out what matters. ShieldScan ranks everything by risk score and tells you what to fix first.</p>
+            </div>
+          </li>
+          <li class="problem-item">
+            <div class="problem-icon yellow">🔒</div>
+            <div>
+              <strong>Default AWS configs are not secure</strong>
+              <p>The AWS defaults that ship when you spin up a new account &mdash; S3 public access, no MFA, no CloudTrail &mdash; would fail a basic security audit. Most people don't find out until something goes wrong.</p>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="cost-card">
+        <div style="font-size:.8rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:20px;">Annual cost comparison</div>
+        <div class="cost-row">
+          <span class="cost-label">Wiz (entry)</span>
+          <span class="cost-val red">$15,000+</span>
+        </div>
+        <div class="cost-row">
+          <span class="cost-label">Orca Security</span>
+          <span class="cost-val red">$12,000+</span>
+        </div>
+        <div class="cost-row">
+          <span class="cost-label">Prisma Cloud</span>
+          <span class="cost-val red">$10,000+</span>
+        </div>
+        <div class="cost-row">
+          <span class="cost-label">AWS Security Hub</span>
+          <span class="cost-val" style="color:var(--yellow);">$300–2,000</span>
+        </div>
+        <div class="cost-row">
+          <span class="cost-label">ShieldScan (Free)</span>
+          <span class="cost-val green">$0</span>
+        </div>
+        <div class="cost-total">
+          <span>You save</span>
+          <span style="color:var(--green);">Up to $15,000/yr</span>
+        </div>
+        <p style="font-size:.72rem;color:var(--muted);margin-top:16px;">Prices sourced from public vendor listings. Enterprise contracts vary.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── FEATURES ──────────────────────────────────────────────────────────── -->
+<section id="features">
+  <div class="container">
+    <span class="section-label">What it does</span>
+    <h2 class="section-title">Everything in one scan</h2>
+    <p class="section-sub">
+      One scan covers your AWS configuration, your containers, your compliance posture, and your overall risk. The AI assistant explains any finding in plain English and writes the fix.
+    </p>
+
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon fi-purple">☁️</div>
+        <h3>Cloud Security Posture (CSPM)</h3>
+        <p>Checks your AWS account against 25 CIS Benchmark v1.5 controls. Finds open S3 buckets, root access keys, missing MFA, exposed security groups, CloudTrail gaps, and weak password policies.</p>
+        <span class="feature-tag">CSPM</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon fi-blue">🐳</div>
+        <h3>Container vulnerability scanning (CWPP)</h3>
+        <p>Scans Docker images with Trivy, the same tool used at Aqua Security. Detects CVEs in OS packages and language dependencies, with severity ratings and fixed-version recommendations.</p>
+        <span class="feature-tag">CWPP</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon fi-green">📊</div>
+        <h3>Risk scoring with ML</h3>
+        <p>An XGBoost model scores each scan from 0 to 100 based on finding severity, count, and exploitability. Higher score means higher risk. You always know how bad things actually are.</p>
+        <span class="feature-tag">ML</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon fi-orange">🤖</div>
+        <h3>AI security assistant</h3>
+        <p>Ask why a finding matters, what the blast radius would be if exploited, or how to write the exact AWS CLI command to fix it. The assistant has your scan context built in, so answers are about your account, not generic advice.</p>
+        <span class="feature-tag">AI</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon fi-red">📋</div>
+        <h3>Compliance tracking</h3>
+        <p>Maps every finding to the relevant CIS AWS Benchmark v1.5 control. Shows your overall compliance score, which controls you pass, and which ones you fail &mdash; with direct links to fix each one.</p>
+        <span class="feature-tag">CIS v1.5</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon fi-pink">📄</div>
+        <h3>PDF audit reports</h3>
+        <p>Download a formatted PDF report after any scan. Useful for course submissions, early investor due diligence, or just keeping a record of what your security posture looked like at a specific point in time.</p>
+        <span class="feature-tag">Reports</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── HOW IT WORKS ──────────────────────────────────────────────────────── -->
+<section class="how" id="how-it-works">
+  <div class="container">
+    <span class="section-label">How it works</span>
+    <h2 class="section-title">Connected and scanning in under 5 minutes</h2>
+    <p class="section-sub">
+      You need an AWS IAM user with the <code style="font-family:JetBrains Mono,monospace;background:rgba(255,255,255,.08);padding:1px 5px;border-radius:3px;font-size:.85em;">SecurityAudit</code> managed policy. That's it.
+    </p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <h3>Create an account</h3>
+        <p>Sign up with your email. No credit card. Student emails get free access permanently.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <h3>Connect AWS</h3>
+        <p>Add your IAM access key and secret. ShieldScan encrypts them with Fernet before storing. Read-only SecurityAudit policy is all that's needed.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <h3>Run a scan</h3>
+        <p>Click Scan. Watch each check complete in real time. Takes 60&ndash;90 seconds for a typical account.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <h3>Fix what matters</h3>
+        <p>Read the findings ranked by risk. Use the AI assistant to get exact fix instructions. Re-scan to confirm.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── SCAN RESULTS DEMO ─────────────────────────────────────────────────── -->
+<section>
+  <div class="container">
+    <span class="section-label">Sample findings</span>
+    <h2 class="section-title">Actual results from a typical AWS account</h2>
+    <p class="section-sub">
+      This is what you get after a scan. Each finding has a severity, the exact resource affected, and a fix. No noise, no filler.
+    </p>
+
+    <div class="demo-grid">
+      <div>
+        <div class="finding-card" style="margin-bottom:16px;">
+          <div class="finding-hd">
+            <span class="sev sev-critical">CRITICAL</span>
+            Root account has active access keys
+          </div>
+          <div class="finding-body">
+            The AWS root account has active programmatic access keys. Root keys have unrestricted access to every service. A leaked root key means full account compromise.
+          </div>
+          <div class="finding-fix">
+            <strong>How to fix</strong>
+            AWS Console &rarr; Account menu &rarr; Security credentials &rarr; Access keys &rarr; Delete both keys.
+          </div>
+        </div>
+
+        <div class="finding-card" style="margin-bottom:16px;">
+          <div class="finding-hd">
+            <span class="sev sev-high">HIGH</span>
+            SSH (port 22) open to 0.0.0.0/0
+          </div>
+          <div class="finding-body">
+            Security group sg-0abc1234 allows inbound SSH traffic from any IP. Any machine on the internet can attempt to connect to your instances.
+          </div>
+          <div class="finding-fix">
+            <strong>How to fix</strong>
+            EC2 &rarr; Security Groups &rarr; sg-0abc1234 &rarr; Inbound rules &rarr; change source from 0.0.0.0/0 to your specific IP.
+          </div>
+        </div>
+
+        <div class="finding-card">
+          <div class="finding-hd">
+            <span class="sev sev-medium">MEDIUM</span>
+            IAM user 'devuser' has access keys but no MFA
+          </div>
+          <div class="finding-body">
+            'devuser' has active access keys but no MFA device configured. Stolen keys grant API access with no second factor.
+          </div>
+          <div class="finding-fix">
+            <strong>How to fix</strong>
+            IAM &rarr; Users &rarr; devuser &rarr; Security credentials &rarr; Assign MFA device.
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="score-panel">
+          <div class="score-big">72</div>
+          <div class="score-label">Risk Score &nbsp;/&nbsp; 100 &nbsp;&nbsp;&mdash;&nbsp;&nbsp; scan #14 &nbsp;&middot;&nbsp; 2 min ago</div>
+
+          <div class="score-bar-wrap">
+            <div class="score-bar-label"><span>Critical</span><span style="color:var(--red);">3</span></div>
+            <div class="bar-bg"><div class="bar-fill" style="width:100%;background:var(--red);"></div></div>
+          </div>
+          <div class="score-bar-wrap">
+            <div class="score-bar-label"><span>High</span><span style="color:var(--orange);">4</span></div>
+            <div class="bar-bg"><div class="bar-fill" style="width:75%;background:var(--orange);"></div></div>
+          </div>
+          <div class="score-bar-wrap">
+            <div class="score-bar-label"><span>Medium</span><span style="color:var(--yellow);">2</span></div>
+            <div class="bar-bg"><div class="bar-fill" style="width:35%;background:var(--yellow);"></div></div>
+          </div>
+          <div class="score-bar-wrap">
+            <div class="score-bar-label"><span>Low</span><span style="color:var(--green);">1</span></div>
+            <div class="bar-bg"><div class="bar-fill" style="width:15%;background:var(--green);"></div></div>
+          </div>
+
+          <div style="margin-top:28px;padding-top:20px;border-top:1px solid var(--border);">
+            <div style="font-size:.78rem;color:var(--muted);margin-bottom:14px;font-weight:600;">CWPP — nginx:latest</div>
+            <div class="score-bar-wrap">
+              <div class="score-bar-label"><span>CVE-2023-44487 (HTTP/2 Rapid Reset)</span><span style="color:var(--orange);">HIGH</span></div>
+              <div class="bar-bg"><div class="bar-fill" style="width:80%;background:var(--orange);"></div></div>
+            </div>
+            <div class="score-bar-wrap">
+              <div class="score-bar-label"><span>CVE-2023-38545 (curl SOCKS5)</span><span style="color:var(--orange);">HIGH</span></div>
+              <div class="bar-bg"><div class="bar-fill" style="width:75%;background:var(--orange);"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── COMPLIANCE ────────────────────────────────────────────────────────── -->
+<section id="compliance" style="background:var(--surface);">
+  <div class="container">
+    <div class="compliance-grid">
+      <div>
+        <span class="section-label">Compliance</span>
+        <h2 class="section-title">Mapped to CIS AWS Benchmark v1.5</h2>
+        <p class="section-sub">
+          ShieldScan checks your account against 25 controls from the CIS AWS Foundations Benchmark. If you're preparing for ISO 27001, SOC 2, or just an internal audit, this gives you a starting point.
+        </p>
+        <p class="section-sub" style="margin-top:16px;">
+          Every scan updates your compliance score automatically. The compliance page shows which controls pass, which fail, and which one you should fix first given your current risk score.
+        </p>
+      </div>
+
+      <div class="framework-list">
+        <div class="framework-row">
+          <div class="fw-icon">📋</div>
+          <div>
+            <div class="fw-name">CIS AWS Foundations v1.5</div>
+            <div class="fw-desc">25 controls covering IAM, logging, networking, and monitoring</div>
+          </div>
+          <div class="fw-progress"><div class="fw-pct yellow">64%</div></div>
+        </div>
+        <div class="framework-row">
+          <div class="fw-icon">🔐</div>
+          <div>
+            <div class="fw-name">NIST CSF (preview)</div>
+            <div class="fw-desc">Identify, Protect, Detect, Respond, Recover</div>
+          </div>
+          <div class="fw-progress"><div class="fw-pct red">Coming soon</div></div>
+        </div>
+        <div class="framework-row">
+          <div class="fw-icon">🌍</div>
+          <div>
+            <div class="fw-name">ISO 27001 mapping</div>
+            <div class="fw-desc">Annex A controls mapped to your AWS findings</div>
+          </div>
+          <div class="fw-progress"><div class="fw-pct red">Coming soon</div></div>
+        </div>
+        <div class="framework-row">
+          <div class="fw-icon">📊</div>
+          <div>
+            <div class="fw-name">SOC 2 Type II prep</div>
+            <div class="fw-desc">Security and availability TSC controls</div>
+          </div>
+          <div class="fw-progress"><div class="fw-pct red">Coming soon</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── AI ASSISTANT ──────────────────────────────────────────────────────── -->
+<section class="ai-section">
+  <div class="container">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center;">
+      <div>
+        <span class="section-label">AI assistant</span>
+        <h2 class="section-title">Ask about your findings, get actual answers</h2>
+        <p class="section-sub">
+          The assistant runs on Claude (Anthropic) with your latest scan data loaded as context. So when you ask "how bad is this?" it answers about your account, not about some generic scenario.
+        </p>
+        <p class="section-sub" style="margin-top:16px;">
+          It knows which findings you have, their severity, the affected resources, and the current fix recommendations. You can ask it to write the AWS CLI commands, explain the attack path, or prioritize what to fix this week.
+        </p>
+      </div>
+
+      <div class="chat-demo">
+        <div class="chat-bar">
+          <span class="chat-dot"></span>
+          AI Assistant &mdash; scan #14 loaded
+        </div>
+        <div class="chat-msgs">
+          <div class="msg">
+            <div class="msg-avatar user">K</div>
+            <div class="msg-bubble user">What's the worst thing in my scan right now?</div>
+          </div>
+          <div class="msg">
+            <div class="msg-avatar ai">AI</div>
+            <div class="msg-bubble">The root account having active access keys. If those credentials leak — from a public Git repo, a misconfigured S3 bucket, anything — someone has full control of your AWS account. No permission boundary, no recovery. Delete them now: <code>AWS Console → Account → Security credentials → Access keys → Delete</code>.</div>
+          </div>
+          <div class="msg">
+            <div class="msg-avatar user">K</div>
+            <div class="msg-bubble user">Can you write the CLI command to restrict SSH on my security group?</div>
+          </div>
+          <div class="msg">
+            <div class="msg-avatar ai">AI</div>
+            <div class="msg-bubble">For sg-0abc1234, run: <code>aws ec2 revoke-security-group-ingress --group-id sg-0abc1234 --protocol tcp --port 22 --cidr 0.0.0.0/0</code>. Then add your IP back: <code>aws ec2 authorize-security-group-ingress --group-id sg-0abc1234 --protocol tcp --port 22 --cidr YOUR.IP.HERE/32</code>. Replace YOUR.IP.HERE with your actual IP.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── TECH STACK ─────────────────────────────────────────────────────────── -->
+<section>
+  <div class="container" style="text-align:center;">
+    <span class="section-label">Tech stack</span>
+    <h2 class="section-title">Open source, open core</h2>
+    <p class="section-sub" style="margin:0 auto 0;">
+      ShieldScan is built on open-source tools throughout. No proprietary data formats, no vendor lock-in on the scanning layer.
+    </p>
+
+    <div class="stack-grid">
+      <div class="stack-item">
+        <div class="stack-icon">⚡</div>
+        <div class="stack-name">FastAPI</div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-icon">⚛️</div>
+        <div class="stack-name">React</div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-icon">🐳</div>
+        <div class="stack-name">Trivy</div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-icon">☁️</div>
+        <div class="stack-name">boto3 / AWS</div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-icon">🤖</div>
+        <div class="stack-name">Claude API</div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-icon">📈</div>
+        <div class="stack-name">XGBoost</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── PRICING ────────────────────────────────────────────────────────────── -->
+<section id="pricing" style="background:var(--surface);">
+  <div class="container" style="text-align:center;">
+    <span class="section-label">Pricing</span>
+    <h2 class="section-title">Free until you don't need it to be</h2>
+    <p class="section-sub" style="margin:0 auto 0;">
+      The free tier covers everything a student or early-stage startup actually needs. Paid plans add team features and priority scanning when you're ready.
+    </p>
+
+    <div class="pricing-grid">
+      <div class="price-card">
+        <div class="price-tier">Free</div>
+        <div class="price-amount">$0</div>
+        <div class="price-period">forever</div>
+        <ul class="price-features">
+          <li>1 AWS account connected</li>
+          <li>Up to 10 scans per month</li>
+          <li>CSPM: all 6 check categories</li>
+          <li>CWPP: container scanning</li>
+          <li>CIS Benchmark compliance</li>
+          <li>AI assistant (50 queries/month)</li>
+          <li>PDF report download</li>
+          <li class="off">Multiple AWS accounts</li>
+          <li class="off">Team members</li>
+          <li class="off">Scheduled scans</li>
+        </ul>
+        <a class="btn btn-ghost" style="width:100%;justify-content:center;" href="/index.html#register">Get started</a>
+      </div>
+
+      <div class="price-card featured">
+        <div class="price-popular">MOST POPULAR</div>
+        <div class="price-tier">Startup</div>
+        <div class="price-amount">$29</div>
+        <div class="price-period">per month</div>
+        <ul class="price-features">
+          <li>Up to 5 AWS accounts</li>
+          <li>Unlimited scans</li>
+          <li>CSPM + CWPP</li>
+          <li>CIS Benchmark + NIST CSF</li>
+          <li>AI assistant (unlimited)</li>
+          <li>PDF &amp; CSV export</li>
+          <li>Up to 5 team members</li>
+          <li>Scheduled daily scans</li>
+          <li>Slack / email alerts</li>
+          <li class="off">Custom integrations</li>
+        </ul>
+        <a class="btn btn-primary" style="width:100%;justify-content:center;" href="/index.html#register">Start free trial</a>
+      </div>
+
+      <div class="price-card">
+        <div class="price-tier">Team</div>
+        <div class="price-amount">$99</div>
+        <div class="price-period">per month</div>
+        <ul class="price-features">
+          <li>Unlimited AWS accounts</li>
+          <li>Unlimited scans</li>
+          <li>All compliance frameworks</li>
+          <li>AI assistant (unlimited)</li>
+          <li>Full export suite</li>
+          <li>Unlimited team members</li>
+          <li>Scheduled scans (any interval)</li>
+          <li>Custom Slack / webhook alerts</li>
+          <li>API access</li>
+          <li>Priority support</li>
+        </ul>
+        <a class="btn btn-ghost" style="width:100%;justify-content:center;" href="mailto:contact@shieldscan.io">Contact us</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── FAQ ────────────────────────────────────────────────────────────────── -->
+<section>
+  <div class="container" style="text-align:center;">
+    <span class="section-label">Questions</span>
+    <h2 class="section-title">Stuff people ask before signing up</h2>
+
+    <div class="faq-list" style="text-align:left;">
+      <div class="faq-item">
+        <div class="faq-q">What AWS permissions does ShieldScan need?</div>
+        <div class="faq-a">
+          The <code>SecurityAudit</code> AWS managed policy is enough. It's a read-only policy that lets ShieldScan list resources without making any changes. We never write to your account. You can verify this in the IAM console or by reading our scanner source code.
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">How are my AWS credentials stored?</div>
+        <div class="faq-a">
+          Your access key and secret key are encrypted with AES-128 Fernet symmetric encryption before being written to the database. The encryption key lives in the server environment, not in the database itself. We do not log credentials or pass them to third-party services.
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">Does ShieldScan change anything in my AWS account?</div>
+        <div class="faq-a">
+          No. ShieldScan only reads. It calls <code>List*</code>, <code>Describe*</code>, and <code>Get*</code> API endpoints. Nothing is created, modified, or deleted. The SecurityAudit policy explicitly prevents write access.
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">What's the difference between CSPM and CWPP?</div>
+        <div class="faq-a">
+          CSPM (Cloud Security Posture Management) checks your AWS account configuration against security best practices. It finds things like open S3 buckets and missing MFA. CWPP (Cloud Workload Protection Platform) scans Docker container images for known CVEs in the software installed inside them. ShieldScan does both in the same scan.
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">Is this actually useful for a school project / student portfolio?</div>
+        <div class="faq-a">
+          Yes. If you're running a project on AWS &mdash; even a small one &mdash; ShieldScan will find real problems. The PDF report is useful for demonstrating security awareness in a course submission or a job interview. It's also just a good habit to run before you hand over access to anyone else.
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">How is the risk score calculated?</div>
+        <div class="faq-a">
+          An XGBoost model takes the count and severity of findings as input features and outputs a score from 0 to 100. A score of 0 means no problems found. A score of 100 means critical findings across multiple categories. The model was trained on a synthetic dataset of AWS account configurations with known risk levels.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── TEAM ────────────────────────────────────────────────────────────────── -->
+<section class="team-section" id="team">
+  <div class="container" style="text-align:center;">
+    <span class="section-label">The team</span>
+    <h2 class="section-title">MSc Computer Security, EPITA Paris</h2>
+    <p class="section-sub" style="margin:0 auto 0;">
+      ShieldScan is the Action Learning Project for our MSc in Computer Security at EPITA. We're four students who got tired of seeing classmates push code to AWS with zero security review, so we built the tool we wished existed.
+    </p>
+
+    <div class="team-grid">
+      <div class="team-card">
+        <div class="team-avatar">K</div>
+        <div class="team-name">Kiran</div>
+        <div class="team-role">Backend &amp; CSPM</div>
+        <div class="team-bio">FastAPI, AWS integrations, database design, and the core scanning engine.</div>
+      </div>
+      <div class="team-card">
+        <div class="team-avatar">T</div>
+        <div class="team-name">Teammate 2</div>
+        <div class="team-role">Frontend &amp; UX</div>
+        <div class="team-bio">React dashboard, component design, and the scan progress experience.</div>
+      </div>
+      <div class="team-card">
+        <div class="team-avatar">T</div>
+        <div class="team-name">Teammate 3</div>
+        <div class="team-role">CWPP &amp; ML</div>
+        <div class="team-bio">Trivy integration, XGBoost risk scoring model, and container security research.</div>
+      </div>
+      <div class="team-card">
+        <div class="team-avatar">T</div>
+        <div class="team-name">Teammate 4</div>
+        <div class="team-role">AI &amp; Compliance</div>
+        <div class="team-bio">Claude AI assistant, RAG architecture, and CIS Benchmark compliance mapping.</div>
+      </div>
+    </div>
+
+    <div class="epita-badge">
+      <span>🎓</span>
+      EPITA Paris &mdash; MSc Computer Security &nbsp;·&nbsp; Action Learning Project 2025–2026
+    </div>
+  </div>
+</section>
+
+<!-- ── CTA ────────────────────────────────────────────────────────────────── -->
+<section class="cta-section">
+  <div class="container">
+    <h2>Your AWS account has at least one problem right now.</h2>
+    <p>Most accounts do. The default settings that AWS ships with are not secure. It takes five minutes to find out where yours stands.</p>
+    <a class="btn btn-primary btn-lg" href="/index.html#register">Scan my account for free</a>
+    <p class="hero-note" style="margin-top:16px;">No credit card &nbsp;·&nbsp; No changes to your AWS account &nbsp;·&nbsp; Read-only access only</p>
+  </div>
+</section>
+
+<!-- ── FOOTER ──────────────────────────────────────────────────────────────── -->
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div class="footer-left">
+        <div class="logo" style="margin-bottom:6px;">
+          <div class="logo-icon" style="width:24px;height:24px;font-size:12px;">🛡️</div>
+          ShieldScan
+        </div>
+        &copy; 2026 ShieldScan &mdash; EPITA MSc Computer Security project. Not yet a commercial product.
+      </div>
+      <div class="footer-right">
+        <a href="/index.html">Dashboard</a>
+        <a href="#features">Features</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#team">Team</a>
+        <a href="mailto:contact@shieldscan.io">Contact</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

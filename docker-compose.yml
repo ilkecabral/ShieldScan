@@ -1,0 +1,96 @@
+# ============================================================
+# ShieldScan — docker-compose
+# Local dev + staging: API + PostgreSQL + Nginx
+#
+# Usage:
+#   docker compose up -d          # start everything
+#   docker compose logs -f api    # tail API logs
+#   docker compose down -v        # stop + wipe volumes
+# ============================================================
+
+version: "3.9"
+
+services:
+
+  # ── PostgreSQL ─────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: shieldscan
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-shieldscan_dev}
+      POSTGRES_DB: shieldscan
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shieldscan"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - internal
+
+  # ── ChromaDB vector store ─────────────────────────────
+  # Dev: runs as a sidecar so the API can use HttpClient (multi-worker safe).
+  # Set CHROMA_HOST=chromadb in .env to activate — falls back to PersistentClient if unset.
+  chromadb:
+    image: chromadb/chroma:latest
+    restart: unless-stopped
+    volumes:
+      - chroma_data:/chroma/chroma
+    networks:
+      - internal
+    healthcheck:
+      disable: true
+
+  # ── FastAPI backend ────────────────────────────────────
+  api:
+    build:
+      context: ./app              # includes backend/ + alembic/ + alembic.ini
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./app/backend/.env
+    environment:
+      DATABASE_URL: postgresql://shieldscan:${DB_PASSWORD:-shieldscan_dev}@db:5432/shieldscan
+      ENV: ${ENV:-development}
+      CHROMA_HOST: chromadb
+      CHROMA_PORT: "8000"
+    volumes:
+      - trivy_cache:/home/shieldscan/.cache/trivy   # Trivy DB cache
+    depends_on:
+      db:
+        condition: service_healthy
+      chromadb:
+        condition: service_started
+    networks:
+      - internal
+      - external
+    # Expose directly in dev (bypasses Nginx for faster iteration)
+    ports:
+      - "8000:8000"
+
+  # ── Nginx reverse proxy ────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./app/frontend:/usr/share/nginx/html:ro     # static frontend
+      - ./ssl:/etc/nginx/ssl:ro                     # TLS certs (Let's Encrypt / ACM)
+    depends_on:
+      - api
+    networks:
+      - external
+
+volumes:
+  postgres_data:
+  chroma_data:    # shared between chromadb service and any backup jobs
+  trivy_cache:
+
+networks:
+  internal:    # DB ↔ API — not exposed to internet
+  external:    # Nginx ↔ API — internet-facing

@@ -1,0 +1,1330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ShieldScan CNAPP</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    * { font-family: 'DM Sans', sans-serif; box-sizing: border-box; }
+    .scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
+    .scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .scrollbar::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 10px; }
+    pre { font-family: 'DM Sans', sans-serif; }
+  </style>
+</head>
+<body class="bg-gray-50">
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+const API = "http://localhost:8000";
+
+// ── Static data ───────────────────────────────────────────────────────────────
+
+const CIS_CONTROLS = [
+  { section:"1", id:"1.4",  title:"No root account access key exists",             status:"FAIL",    fid:"F002" },
+  { section:"1", id:"1.5",  title:"MFA enabled for root account",                  status:"UNKNOWN", fid:null },
+  { section:"1", id:"1.8",  title:"Minimum password length >= 14 characters",      status:"PASS",    fid:null },
+  { section:"1", id:"1.9",  title:"Password reuse prevention (24 passwords)",      status:"PASS",    fid:null },
+  { section:"1", id:"1.10", title:"MFA enabled for all console IAM users",          status:"UNKNOWN", fid:null },
+  { section:"1", id:"1.14", title:"Access keys rotated within 90 days",            status:"UNKNOWN", fid:null },
+  { section:"1", id:"1.16", title:"IAM policies attached only to groups/roles",    status:"PASS",    fid:null },
+  { section:"2", id:"2.1.1",title:"S3 Block Public Access enabled (bucket level)", status:"FAIL",    fid:"F001" },
+  { section:"2", id:"2.1.2",title:"S3 MFA Delete enabled",                         status:"UNKNOWN", fid:null },
+  { section:"2", id:"2.1.3",title:"S3 versioning enabled",                         status:"FAIL",    fid:"F006" },
+  { section:"2", id:"2.3.1",title:"RDS storage encryption enabled",                status:"PASS",    fid:null },
+  { section:"2", id:"2.3.2",title:"RDS not publicly accessible",                   status:"FAIL",    fid:"F004" },
+  { section:"2", id:"2.3.3",title:"RDS automated backups enabled",                 status:"PASS",    fid:null },
+  { section:"3", id:"3.1",  title:"CloudTrail enabled in all regions",             status:"FAIL",    fid:"F005" },
+  { section:"3", id:"3.2",  title:"CloudTrail log file validation enabled",        status:"UNKNOWN", fid:null },
+  { section:"3", id:"3.3",  title:"CloudTrail S3 bucket not publicly accessible",  status:"PASS",    fid:null },
+  { section:"3", id:"3.7",  title:"CloudTrail logs encrypted at rest (KMS)",       status:"UNKNOWN", fid:null },
+  { section:"4", id:"4.1",  title:"Unauthorized API calls alarm exists",           status:"UNKNOWN", fid:null },
+  { section:"4", id:"4.3",  title:"Root account usage alarm exists",               status:"UNKNOWN", fid:null },
+  { section:"4", id:"4.15", title:"AWS Organizations changes alarm",               status:"UNKNOWN", fid:null },
+  { section:"5", id:"5.1",  title:"No network ACLs allow ingress 0.0.0.0/0",      status:"PASS",    fid:null },
+  { section:"5", id:"5.2",  title:"No security groups allow SSH from 0.0.0.0/0",  status:"FAIL",    fid:"F003" },
+  { section:"5", id:"5.3",  title:"No security groups allow RDP from 0.0.0.0/0",  status:"PASS",    fid:null },
+  { section:"5", id:"5.4",  title:"VPC default security group restricts all traffic",status:"PASS",  fid:null },
+  { section:"5", id:"5.6",  title:"EC2 instances require IMDSv2",                  status:"FAIL",    fid:"F007" },
+];
+
+const CIS_SECTIONS = {
+  "1": "Identity & Access Management",
+  "2": "Storage",
+  "3": "Logging",
+  "4": "Monitoring",
+  "5": "Networking",
+};
+
+const INVENTORY = [
+  { id:"INV-01", type:"S3 Bucket",      name:"shieldscan-prod-logs",      region:"us-east-1", risk:"CRITICAL", findings:1 },
+  { id:"INV-02", type:"S3 Bucket",      name:"shieldscan-backups",        region:"us-east-1", risk:"MEDIUM",   findings:1 },
+  { id:"INV-03", type:"IAM",            name:"root",                       region:"global",    risk:"CRITICAL", findings:1 },
+  { id:"INV-04", type:"Security Group", name:"sg-0a1b2c3d4e (web-prod)",  region:"us-east-1", risk:"HIGH",     findings:1 },
+  { id:"INV-05", type:"RDS Instance",   name:"rds-prod-mysql-01",         region:"eu-west-1", risk:"HIGH",     findings:1 },
+  { id:"INV-06", type:"EC2 Instance",   name:"i-0a1b2c3d4e5f (webapp-01)",region:"us-east-1", risk:"MEDIUM",  findings:1 },
+  { id:"INV-07", type:"CloudTrail",     name:"us-east-1 trail",            region:"us-east-1", risk:"HIGH",    findings:1 },
+  { id:"INV-08", type:"Container",      name:"nginx:1.21",                 region:"N/A",       risk:"HIGH",     findings:1 },
+  { id:"INV-09", type:"Container",      name:"python:3.9-slim",            region:"N/A",       risk:"MEDIUM",   findings:1 },
+  { id:"INV-10", type:"VPC",            name:"vpc-0main-prod",             region:"us-east-1", risk:"CLEAN",    findings:0 },
+  { id:"INV-11", type:"Lambda",         name:"shieldscan-processor",       region:"us-east-1", risk:"CLEAN",    findings:0 },
+  { id:"INV-12", type:"KMS Key",        name:"key-prod-main",              region:"us-east-1", risk:"CLEAN",    findings:0 },
+  { id:"INV-13", type:"CloudWatch",     name:"prod-monitoring",            region:"us-east-1", risk:"CLEAN",    findings:0 },
+];
+
+function riskColor(n) {
+  return n >= 80 ? "#dc2626" : n >= 65 ? "#ea580c" : n >= 50 ? "#ca8a04" : "#16a34a";
+}
+
+// ── Atoms ─────────────────────────────────────────────────────────────────────
+
+const SEV_BADGE = {
+  CRITICAL:"bg-red-600 text-white",
+  HIGH:"bg-orange-500 text-white",
+  MEDIUM:"bg-amber-400 text-gray-900",
+  LOW:"bg-blue-400 text-white",
+  CLEAN:"bg-green-500 text-white",
+};
+
+const Badge = ({ s }) => (
+  <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${SEV_BADGE[s]||SEV_BADGE.LOW}`}>{s}</span>
+);
+
+const SvcBadge = ({ s }) => {
+  const cfg = s === "CSPM" ? "bg-teal-100 text-teal-700" : "bg-purple-100 text-purple-700";
+  return <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${cfg}`}>{s}</span>;
+};
+
+const Spinner = ({ sz = 4 }) => (
+  <svg className={`animate-spin h-${sz} w-${sz} text-teal-600`} viewBox="0 0 24 24" fill="none">
+    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity=".25"/>
+    <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
+  </svg>
+);
+
+const StatCard = ({ label, value, color, sub, icon }) => (
+  <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col justify-between min-h-[90px]">
+    <div className="flex items-center justify-between">
+      <p className="text-[11px] text-gray-400 uppercase tracking-wider font-medium">{label}</p>
+      {icon && <span className="text-lg leading-none">{icon}</span>}
+    </div>
+    <div>
+      <p className={`text-3xl font-bold leading-none ${color}`}>{value}</p>
+      {sub && <p className="text-[11px] text-gray-400 mt-1">{sub}</p>}
+    </div>
+  </div>
+);
+
+const RiskGauge = ({ score }) => {
+  const color = riskColor(score);
+  const label = score < 50 ? "Critical" : score < 65 ? "High Risk" : score < 80 ? "Medium" : "Low Risk";
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col items-center justify-center min-h-[90px]">
+      <p className="text-[11px] text-gray-400 uppercase tracking-wider font-medium mb-2">Risk Score</p>
+      <div className="relative w-14 h-14">
+        <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
+          <circle cx="18" cy="18" r="15.9" fill="none" stroke="#e5e7eb" strokeWidth="4"/>
+          <circle cx="18" cy="18" r="15.9" fill="none" stroke={color} strokeWidth="4"
+            strokeDasharray={`${score} ${100 - score}`} strokeLinecap="round"/>
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-sm font-bold leading-none" style={{color}}>{score}</span>
+          <span className="text-[9px] text-gray-400">/100</span>
+        </div>
+      </div>
+      <p className="text-[11px] font-semibold mt-1" style={{color}}>{label}</p>
+    </div>
+  );
+};
+
+// ── Auth Pages ─────────────────────────────────────────────────────────────────
+
+function LoginPage({ onLogin, onGoSignup }) {
+  const [email, setEmail] = useState("");
+  const [pwd, setPwd] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+
+  const submit = async (e) => {
+    e.preventDefault(); setErr("");
+    if (!email || !pwd) { setErr("Please fill in all fields."); return; }
+    setLoading(true);
+    await new Promise(r => setTimeout(r, 700));
+    setLoading(false);
+    onLogin({ email, name: email.split("@")[0] });
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-[#0F6E56] to-teal-800 flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        <div className="text-center mb-8">
+          <div className="text-6xl mb-3">&#128737;&#65039;</div>
+          <h1 className="text-3xl font-bold text-white">ShieldScan</h1>
+          <p className="text-teal-200 mt-1 text-sm">Cloud-Native Application Protection Platform</p>
+        </div>
+        <div className="bg-white rounded-2xl shadow-2xl p-8">
+          <h2 className="text-lg font-semibold text-gray-800 mb-5">Sign in to your account</h2>
+          {err && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{err}</div>}
+          <form onSubmit={submit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">Email</label>
+              <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-50"/>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">Password</label>
+              <input type="password" value={pwd} onChange={e=>setPwd(e.target.value)} placeholder="........"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-50"/>
+            </div>
+            <button type="submit" disabled={loading}
+              className="w-full py-2.5 bg-[#0F6E56] text-white text-sm font-semibold rounded-lg hover:bg-teal-700 disabled:opacity-60 transition-colors flex items-center justify-center gap-2">
+              {loading && <Spinner sz={4}/>}{loading ? "Signing in..." : "Sign in"}
+            </button>
+          </form>
+          <div className="relative my-5">
+            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-100"/></div>
+            <div className="relative flex justify-center"><span className="px-3 bg-white text-xs text-gray-400">or</span></div>
+          </div>
+          <button onClick={() => onLogin({ email:"demo@epita.fr", name:"Demo User" })}
+            className="w-full py-2.5 border-2 border-[#0F6E56] text-[#0F6E56] text-sm font-semibold rounded-lg hover:bg-teal-50 transition-colors">
+            Continue with Demo Mode
+          </button>
+          <p className="text-center text-xs text-gray-400 mt-6">
+            No account?{" "}
+            <button onClick={onGoSignup} className="text-[#0F6E56] font-semibold hover:underline">Create one</button>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SignupPage({ onSignup, onGoLogin }) {
+  const [f, setF] = useState({ name:"", email:"", org:"", pwd:"", confirm:"" });
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+  const set = k => e => setF(p => ({...p, [k]: e.target.value}));
+
+  const submit = async (e) => {
+    e.preventDefault(); setErr("");
+    if (!f.name || !f.email || !f.pwd) { setErr("Fill in all required fields."); return; }
+    if (f.pwd !== f.confirm) { setErr("Passwords do not match."); return; }
+    if (f.pwd.length < 8) { setErr("Password must be at least 8 characters."); return; }
+    setLoading(true);
+    await new Promise(r => setTimeout(r, 900));
+    setLoading(false);
+    onSignup({ email: f.email, name: f.name });
+  };
+
+  const Field = ({ label, k, type="text", ph, req }) => (
+    <div>
+      <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">
+        {label}{req && <span className="text-red-400 ml-0.5">*</span>}
+      </label>
+      <input type={type} value={f[k]} onChange={set(k)} placeholder={ph}
+        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-50"/>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-[#0F6E56] to-teal-800 flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        <div className="text-center mb-8">
+          <div className="text-6xl mb-3">&#128737;&#65039;</div>
+          <h1 className="text-3xl font-bold text-white">ShieldScan</h1>
+          <p className="text-teal-200 mt-1 text-sm">Create your account</p>
+        </div>
+        <div className="bg-white rounded-2xl shadow-2xl p-8">
+          <h2 className="text-lg font-semibold text-gray-800 mb-5">Create account</h2>
+          {err && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{err}</div>}
+          <form onSubmit={submit} className="space-y-4">
+            <Field label="Full name" k="name" ph="Kiran Reddy" req/>
+            <Field label="Email" k="email" type="email" ph="you@example.com" req/>
+            <Field label="Organisation" k="org" ph="EPITA / Startup"/>
+            <Field label="Password" k="pwd" type="password" ph="Min. 8 characters" req/>
+            <Field label="Confirm Password" k="confirm" type="password" ph="Repeat password" req/>
+            <button type="submit" disabled={loading}
+              className="w-full py-2.5 bg-[#0F6E56] text-white text-sm font-semibold rounded-lg hover:bg-teal-700 disabled:opacity-60 transition-colors flex items-center justify-center gap-2">
+              {loading && <Spinner sz={4}/>}{loading ? "Creating account..." : "Create account"}
+            </button>
+          </form>
+          <p className="text-center text-xs text-gray-400 mt-6">
+            Already have an account?{" "}
+            <button onClick={onGoLogin} className="text-[#0F6E56] font-semibold hover:underline">Sign in</button>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── AWS Connect Wizard ─────────────────────────────────────────────────────────
+
+function AWSConnect({ onConnected }) {
+  const [step, setStep] = useState(1);
+  const [method, setMethod] = useState("keys");
+  const [creds, setCreds] = useState({ ak:"", sk:"", token:"", roleArn:"" });
+  const [regions, setRegions] = useState(["us-east-1"]);
+  const [testing, setTesting] = useState(false);
+  const set = k => e => setCreds(c=>({...c,[k]:e.target.value}));
+  const ALL_REGIONS = ["us-east-1","us-east-2","us-west-1","us-west-2","eu-west-1","eu-west-2","eu-central-1","ap-southeast-1","ap-northeast-1"];
+
+  const testConn = async () => {
+    setTesting(true);
+    await new Promise(r => setTimeout(r, 1400));
+    setTesting(false); setStep(3);
+  };
+
+  const toggleRegion = r => setRegions(p => p.includes(r) ? p.filter(x=>x!==r) : [...p,r]);
+
+  return (
+    <div className="max-w-2xl">
+      <h2 className="text-base font-semibold text-gray-800 mb-0.5">Connect AWS Account</h2>
+      <p className="text-sm text-gray-400 mb-6">Add credentials to enable live CSPM scanning via boto3.</p>
+
+      <div className="flex items-center gap-2 mb-8">
+        {["Credentials","Regions","Verify"].map((s, i) => (
+          <React.Fragment key={s}>
+            <div className="flex items-center gap-2">
+              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all
+                ${i+1 < step ? "bg-[#0F6E56] border-[#0F6E56] text-white"
+                  : i+1 === step ? "border-[#0F6E56] text-[#0F6E56]"
+                  : "border-gray-200 text-gray-300"}`}>{i+1}</div>
+              <span className={`text-xs font-medium ${i+1 <= step ? "text-[#0F6E56]" : "text-gray-300"}`}>{s}</span>
+            </div>
+            {i < 2 && <div className={`flex-1 h-px ${i+1 < step ? "bg-[#0F6E56]" : "bg-gray-200"}`}/>}
+          </React.Fragment>
+        ))}
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
+        {step === 1 && (
+          <div className="space-y-4">
+            <div className="flex gap-3 mb-2">
+              {[["keys","Access Keys"],["role","IAM Role ARN"]].map(([v,lbl]) => (
+                <button key={v} onClick={()=>setMethod(v)}
+                  className={`flex-1 py-2 text-sm font-medium rounded-lg border-2 transition-colors
+                    ${method===v ? "border-[#0F6E56] text-[#0F6E56] bg-teal-50" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}>
+                  {lbl}
+                </button>
+              ))}
+            </div>
+            {method === "keys" ? (
+              <>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">AWS Access Key ID <span className="text-red-400">*</span></label>
+                  <input value={creds.ak} onChange={set("ak")} placeholder="AKIAIOSFODNN7EXAMPLE"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm font-mono focus:outline-none focus:border-teal-400"/>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">AWS Secret Access Key <span className="text-red-400">*</span></label>
+                  <input type="password" value={creds.sk} onChange={set("sk")} placeholder="................"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-teal-400"/>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">Session Token <span className="text-gray-300">(optional)</span></label>
+                  <input value={creds.token} onChange={set("token")} placeholder="AQoDYXdz... (for temporary credentials)"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm font-mono focus:outline-none focus:border-teal-400"/>
+                </div>
+              </>
+            ) : (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">IAM Role ARN <span className="text-red-400">*</span></label>
+                <input value={creds.roleArn} onChange={set("roleArn")} placeholder="arn:aws:iam::123456789012:role/ShieldScanRole"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm font-mono focus:outline-none focus:border-teal-400"/>
+                <p className="text-xs text-gray-400 mt-2">Role must have AWS-managed <code className="bg-gray-100 px-1 rounded">SecurityAudit</code> policy attached.</p>
+              </div>
+            )}
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700 flex gap-2">
+              <span>&#128274;</span>
+              <span>Credentials are stored encrypted. ShieldScan only uses read-only AWS APIs - no write access.</span>
+            </div>
+            <button onClick={()=>setStep(2)}
+              className="w-full py-2.5 bg-[#0F6E56] text-white text-sm font-semibold rounded-lg hover:bg-teal-700 transition-colors">
+              Continue
+            </button>
+          </div>
+        )}
+
+        {step === 2 && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-500">Select AWS regions to scan. More regions = longer scan time (~2 min each).</p>
+            <div className="grid grid-cols-3 gap-2">
+              {ALL_REGIONS.map(r => (
+                <button key={r} onClick={()=>toggleRegion(r)}
+                  className={`px-3 py-2 text-xs rounded-lg border-2 font-mono transition-colors
+                    ${regions.includes(r) ? "border-[#0F6E56] bg-teal-50 text-teal-700" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}>
+                  {r}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-400">{regions.length} region{regions.length!==1?"s":""} selected</p>
+            <div className="flex gap-3">
+              <button onClick={()=>setStep(1)} className="flex-1 py-2.5 border border-gray-200 text-sm font-medium rounded-lg hover:bg-gray-50">Back</button>
+              <button onClick={testConn} disabled={testing || regions.length===0}
+                className="flex-1 py-2.5 bg-[#0F6E56] text-white text-sm font-semibold rounded-lg hover:bg-teal-700 disabled:opacity-60 flex items-center justify-center gap-2">
+                {testing ? <><Spinner sz={4}/> Testing connection...</> : "Test and Connect"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div className="text-center py-4 space-y-5">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center text-3xl mx-auto">&#9989;</div>
+            <div>
+              <p className="font-semibold text-gray-800">AWS account connected successfully</p>
+              <p className="text-sm text-gray-400 mt-1">Account: 123456789012 · {regions.slice(0,3).join(", ")}{regions.length>3?" +"+String(regions.length-3)+" more":""}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="bg-gray-50 rounded-lg p-3 text-left">
+                <p className="text-xs text-gray-400">Permission level</p>
+                <p className="font-medium text-gray-700 mt-0.5">Read-only (SecurityAudit)</p>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3 text-left">
+                <p className="text-xs text-gray-400">Connected</p>
+                <p className="font-medium text-gray-700 mt-0.5">{new Date().toLocaleDateString()}</p>
+              </div>
+            </div>
+            <button onClick={onConnected}
+              className="w-full py-2.5 bg-[#0F6E56] text-white text-sm font-semibold rounded-lg hover:bg-teal-700 transition-colors">
+              Go to Dashboard
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Chat hook ─────────────────────────────────────────────────────────────────
+
+function useChat(init) {
+  const [msgs, setMsgs] = useState([{ role:"assistant", content:init }]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const send = useCallback(async (text) => {
+    const q = (text || input).trim();
+    if (!q || loading) return;
+    setMsgs(p => [...p, { role:"user", content:q }]);
+    setInput("");
+    setLoading(true);
+    try {
+      const res = await fetch(API + "/api/ai/chat", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ question:q, user_id:"demo" }),
+      });
+      const d = await res.json();
+      setMsgs(p => [...p, { role:"assistant", content:d.response }]);
+    } catch {
+      setMsgs(p => [...p, { role:"assistant", content:"Backend offline. Run: python demo_backend.py" }]);
+    }
+    setLoading(false);
+  }, [input, loading]);
+
+  return { msgs, input, setInput, loading, send };
+}
+
+const Bubble = ({ msg }) => {
+  const bot = msg.role === "assistant";
+  return (
+    <div className={`flex gap-2 mb-3 ${bot ? "" : "flex-row-reverse"}`}>
+      <div className={`w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold
+        ${bot ? "bg-[#0F6E56] text-white" : "bg-gray-200 text-gray-600"}`}>{bot ? "AI" : "Me"}</div>
+      <div className={`max-w-[76%] rounded-xl px-3 py-2 text-sm leading-relaxed
+        ${bot ? "bg-gray-100 text-gray-800" : "bg-[#0F6E56] text-white"}`}>
+        <pre className="whitespace-pre-wrap font-sans">{msg.content}</pre>
+      </div>
+    </div>
+  );
+};
+
+// ── Sidebar ───────────────────────────────────────────────────────────────────
+
+const NAV = [
+  { group:"Overview",  items:[
+    { id:"dashboard", label:"Dashboard" },
+    { id:"findings",  label:"Findings" },
+  ]},
+  { group:"Security", items:[
+    { id:"cspm",       label:"CSPM" },
+    { id:"cwpp",       label:"CWPP" },
+    { id:"compliance", label:"Compliance" },
+  ]},
+  { group:"Assets",   items:[
+    { id:"inventory", label:"Inventory" },
+    { id:"reports",   label:"Reports" },
+  ]},
+  { group:"AI",       items:[
+    { id:"ai",        label:"AI Assistant" },
+  ]},
+  { group:"Account",  items:[
+    { id:"settings",  label:"Settings" },
+  ]},
+];
+
+const Sidebar = ({ view, setView, user }) => (
+  <aside className="w-56 flex-shrink-0 bg-[#0F6E56] text-white flex flex-col h-full">
+    <div className="px-5 py-4 border-b border-white/10 flex items-center gap-2.5 flex-shrink-0">
+      <span className="text-2xl leading-none">&#128737;&#65039;</span>
+      <div>
+        <p className="font-bold text-sm leading-tight">ShieldScan</p>
+        <p className="text-[11px] text-teal-200">CNAPP Platform</p>
+      </div>
+    </div>
+    <nav className="flex-1 p-3 overflow-y-auto scrollbar">
+      {NAV.map(g => (
+        <div key={g.group} className="mb-4">
+          <p className="text-[10px] font-semibold text-teal-300 uppercase tracking-widest px-2 mb-1">{g.group}</p>
+          {g.items.map(item => (
+            <button key={item.id} onClick={()=>setView(item.id)}
+              className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors mb-0.5
+                ${view===item.id ? "bg-white/20 font-semibold" : "text-teal-100 hover:bg-white/10"}`}>
+              {item.label}
+            </button>
+          ))}
+        </div>
+      ))}
+    </nav>
+    <div className="px-4 py-3 border-t border-white/10 flex-shrink-0">
+      <div className="flex items-center gap-2">
+        <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-xs font-bold">
+          {(user && user.name && user.name[0] ? user.name[0] : "U").toUpperCase()}
+        </div>
+        <div className="min-w-0">
+          <p className="text-xs font-medium truncate">{user ? user.name : "User"}</p>
+          <p className="text-[10px] text-teal-300 truncate">{user ? user.email : ""}</p>
+        </div>
+      </div>
+    </div>
+  </aside>
+);
+
+// ── TopBar ────────────────────────────────────────────────────────────────────
+
+const TopBar = ({ title, lastScan, onScan, scanning }) => (
+  <header className="flex-shrink-0 flex items-center justify-between px-6 py-3.5 bg-white border-b border-gray-200">
+    <div>
+      <h1 className="text-base font-semibold text-gray-800">{title}</h1>
+      {lastScan && <p className="text-xs text-gray-400 mt-0.5">Last scan: {lastScan}</p>}
+    </div>
+    <div className="flex items-center gap-3">
+      <div className="flex items-center gap-1.5 text-xs text-gray-500 bg-gray-100 rounded-lg px-3 py-1.5">
+        <span className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0 inline-block"></span>
+        AWS Connected
+      </div>
+      {onScan && (
+        <button onClick={onScan} disabled={scanning}
+          className="flex items-center gap-2 px-4 py-2 bg-[#0F6E56] text-white text-sm font-medium rounded-lg hover:bg-teal-700 disabled:opacity-60 transition-colors">
+          {scanning ? <Spinner sz={4}/> : null}
+          {scanning ? "Scanning..." : "Run Scan"}
+        </button>
+      )}
+    </div>
+  </header>
+);
+
+// ── Findings Table ────────────────────────────────────────────────────────────
+
+const SEVS = ["ALL","CRITICAL","HIGH","MEDIUM","LOW"];
+
+function FindingsTable({ findings, onTip, tips, tipLoading, expanded }) {
+  const [filter, setFilter] = useState("ALL");
+  const [search, setSearch] = useState("");
+  const counts = findings.reduce((a,f)=>({...a,[f.severity]:(a[f.severity]||0)+1}),{});
+  const rows = findings
+    .filter(f => filter==="ALL" || f.severity===filter)
+    .filter(f => !search || f.resource.toLowerCase().includes(search.toLowerCase()) || f.finding.toLowerCase().includes(search.toLowerCase()));
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200">
+      <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3">
+          <p className="font-medium text-gray-700 text-sm">Findings <span className="text-gray-400">({rows.length})</span></p>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search..."
+            className="border border-gray-200 rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:border-teal-400 w-36"/>
+        </div>
+        <div className="flex gap-1.5 flex-wrap">
+          {SEVS.map(s => (
+            <button key={s} onClick={()=>setFilter(s)}
+              className={`px-2.5 py-1 text-xs rounded-md border font-medium transition-colors
+                ${filter===s ? "bg-[#0F6E56] text-white border-teal-600" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}>
+              {s}{s!=="ALL" && counts[s] ? " ("+counts[s]+")" : ""}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-100 text-xs text-gray-400 uppercase tracking-wider text-left">
+              {["ID","Resource","Finding","Severity","Service","Risk","Fix"].map(h=>(
+                <th key={h} className="px-3 py-3 font-semibold whitespace-nowrap">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(f => (
+              <React.Fragment key={f.id}>
+                <tr className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                  <td className="px-3 py-3 font-mono text-xs text-gray-400 whitespace-nowrap">{f.id}</td>
+                  <td className="px-3 py-3" style={{maxWidth:180}}>
+                    <p className="font-medium text-gray-800 truncate" title={f.resource}>{f.resource}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{f.resource_type} · {f.region}</p>
+                  </td>
+                  <td className="px-3 py-3 text-gray-700">{f.finding}</td>
+                  <td className="px-3 py-3 whitespace-nowrap"><Badge s={f.severity}/></td>
+                  <td className="px-3 py-3 whitespace-nowrap"><SvcBadge s={f.service}/></td>
+                  <td className="px-3 py-3 font-semibold whitespace-nowrap" style={{color:riskColor(f.risk_score)}}>{f.risk_score}</td>
+                  <td className="px-3 py-3 whitespace-nowrap">
+                    <button onClick={()=>onTip(f)}
+                      className="text-xs px-2 py-1 border border-teal-300 rounded text-teal-700 hover:bg-teal-50 transition-colors">
+                      {tipLoading[f.id] ? "..." : expanded===f.id ? "Hide" : "Fix"}
+                    </button>
+                  </td>
+                </tr>
+                {expanded===f.id && (
+                  <tr className="bg-teal-50 border-b border-teal-100">
+                    <td colSpan="7" className="px-4 py-3">
+                      <p className="text-xs font-semibold text-teal-700 mb-1.5">AI Remediation — {f.resource}</p>
+                      {tipLoading[f.id]
+                        ? <p className="text-sm text-gray-400 animate-pulse">Generating steps...</p>
+                        : <pre className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap font-sans">{tips[f.id]}</pre>}
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
+            ))}
+            {rows.length===0 && (
+              <tr><td colSpan="7" className="px-4 py-10 text-center text-sm text-gray-400">No findings match this filter.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+
+function Dashboard({ findings, stats, onTip, tips, tipLoading, expanded }) {
+  const compPct = useMemo(() => {
+    const pass = CIS_CONTROLS.filter(c=>c.status==="PASS").length;
+    const total = CIS_CONTROLS.filter(c=>c.status!=="UNKNOWN").length;
+    return Math.round((pass/total)*100);
+  }, []);
+
+  const topRisks = [...findings].sort((a,b)=>b.risk_score-a.risk_score).slice(0,3);
+  const cspmCount = findings.filter(f=>f.service==="CSPM").length;
+  const cwppCount = findings.filter(f=>f.service==="CWPP").length;
+  const total = cspmCount + cwppCount;
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-6 gap-4">
+        <RiskGauge score={stats.risk_score}/>
+        <StatCard label="Total" value={stats.total} color="text-gray-800" icon="!"/>
+        <StatCard label="Critical" value={stats.critical} color="text-red-600" sub="Act immediately"/>
+        <StatCard label="High" value={stats.high} color="text-orange-500" sub="Fix within 24h"/>
+        <StatCard label="Medium" value={stats.medium} color="text-amber-600" sub="Fix within 7d"/>
+        <StatCard label="CIS Compliance" value={compPct+"%"} color="text-teal-600" sub="CIS AWS Benchmark"/>
+      </div>
+
+      <div className="grid grid-cols-3 gap-4">
+        <div className="col-span-2 bg-white rounded-xl border border-gray-200">
+          <div className="px-4 py-3 border-b border-gray-100">
+            <p className="font-semibold text-sm text-gray-700">Top Priority Findings</p>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {topRisks.map((f, i) => (
+              <div key={f.id} className="px-4 py-3 flex items-center gap-3">
+                <span className="text-xl font-bold text-gray-200 w-7 text-center">{"#"+(i+1)}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-800 truncate">{f.finding}</p>
+                  <p className="text-xs text-gray-400 truncate">{f.resource} · {f.region}</p>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <Badge s={f.severity}/>
+                  <span className="text-sm font-bold" style={{color:riskColor(f.risk_score)}}>{f.risk_score}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <p className="text-[11px] text-gray-400 uppercase tracking-wide mb-3">Service Coverage</p>
+            {[["CSPM","Cloud",cspmCount],["CWPP","Container",cwppCount]].map(([s,icon,n])=>(
+              <div key={s} className="flex items-center justify-between py-1.5">
+                <div className="flex items-center gap-2 text-sm text-gray-600">{s}</div>
+                <div className="flex items-center gap-2">
+                  <div className="w-20 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-[#0F6E56] rounded-full" style={{width:(total>0?(n/total)*100:0)+"%"}}/>
+                  </div>
+                  <span className="text-xs font-semibold text-gray-700 w-4 text-right">{n}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <p className="text-[11px] text-gray-400 uppercase tracking-wide mb-3">Regions Scanned</p>
+            {["us-east-1","eu-west-1","global"].map(r=>(
+              <div key={r} className="flex items-center gap-2 py-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block"></span>
+                <span className="text-xs text-gray-600 font-mono">{r}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <FindingsTable findings={findings} onTip={onTip} tips={tips} tipLoading={tipLoading} expanded={expanded}/>
+    </div>
+  );
+}
+
+// ── CSPM ──────────────────────────────────────────────────────────────────────
+
+function CSPMPage({ findings }) {
+  const cspm = findings.filter(f=>f.service==="CSPM");
+  const byType = cspm.reduce((a,f)=>{ a[f.resource_type] = a[f.resource_type]||[]; a[f.resource_type].push(f); return a; },{});
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-4 gap-4">
+        <StatCard label="Misconfigurations" value={cspm.length} color="text-gray-800"/>
+        <StatCard label="Critical" value={cspm.filter(f=>f.severity==="CRITICAL").length} color="text-red-600"/>
+        <StatCard label="High" value={cspm.filter(f=>f.severity==="HIGH").length} color="text-orange-500"/>
+        <StatCard label="Regions" value="3" color="text-teal-600" sub="us-east-1, eu-west-1, global"/>
+      </div>
+      {Object.entries(byType).map(([type, items]) => (
+        <div key={type} className="bg-white rounded-xl border border-gray-200">
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+            <p className="font-semibold text-sm text-gray-700">{type}</p>
+            <span className="text-xs text-gray-400">{items.length} finding{items.length>1?"s":""}</span>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {items.map(f=>(
+              <div key={f.id} className="px-4 py-3 flex items-start gap-4">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-800">{f.finding}</p>
+                  <p className="text-xs text-gray-400 mt-0.5 truncate">{f.resource} · {f.region}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{f.cis_control}</p>
+                  <p className="text-xs text-teal-600 mt-1">Fix: {f.remediation}</p>
+                </div>
+                <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                  <Badge s={f.severity}/>
+                  <span className="text-xs font-semibold" style={{color:riskColor(f.risk_score)}}>Risk {f.risk_score}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── CWPP ──────────────────────────────────────────────────────────────────────
+
+function CWPPPage({ findings }) {
+  const cwpp = findings.filter(f=>f.service==="CWPP");
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-4 gap-4">
+        <StatCard label="Container CVEs" value={cwpp.length} color="text-gray-800"/>
+        <StatCard label="High" value={cwpp.filter(f=>f.severity==="HIGH").length} color="text-orange-500"/>
+        <StatCard label="Medium" value={cwpp.filter(f=>f.severity==="MEDIUM").length} color="text-amber-600"/>
+        <StatCard label="Images Scanned" value="4" color="text-teal-600" sub="via Trivy"/>
+      </div>
+      {cwpp.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-10 text-center text-sm text-gray-400">No container vulnerabilities found.</div>
+      ) : cwpp.map(f => (
+        <div key={f.id} className="bg-white rounded-xl border border-gray-200 p-4">
+          <div className="flex items-start gap-4">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gray-800">{f.finding}</p>
+              <p className="text-xs text-gray-500 mt-1">Image: <code className="font-mono bg-gray-100 px-1 rounded">{f.resource}</code></p>
+              <p className="text-xs text-teal-600 mt-2">Fix: {f.remediation}</p>
+            </div>
+            <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+              <Badge s={f.severity}/>
+              <span className="text-xs font-semibold" style={{color:riskColor(f.risk_score)}}>Risk {f.risk_score}</span>
+              <span className="text-xs text-gray-400">{f.cis_control}</span>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Compliance ────────────────────────────────────────────────────────────────
+
+function CompliancePage() {
+  const [openSec, setOpenSec] = useState("1");
+  const [framework, setFramework] = useState("CIS AWS");
+
+  const pass = CIS_CONTROLS.filter(c=>c.status==="PASS").length;
+  const fail = CIS_CONTROLS.filter(c=>c.status==="FAIL").length;
+  const unk  = CIS_CONTROLS.filter(c=>c.status==="UNKNOWN").length;
+  const pct = Math.round((pass/(pass+fail))*100);
+
+  const statusCls = {
+    PASS:    "bg-green-100 text-green-700 border border-green-200",
+    FAIL:    "bg-red-100 text-red-700 border border-red-200",
+    UNKNOWN: "bg-gray-100 text-gray-400 border border-gray-200",
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-4 gap-4">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col items-center justify-center">
+          <p className="text-[11px] text-gray-400 uppercase tracking-wide mb-2">Compliance Score</p>
+          <p className="text-4xl font-bold text-teal-600">{pct}%</p>
+          <div className="w-full h-2 bg-gray-100 rounded-full mt-3 overflow-hidden">
+            <div className="h-full bg-teal-500 rounded-full" style={{width:pct+"%"}}/>
+          </div>
+          <p className="text-xs text-gray-400 mt-2">CIS AWS Benchmark v1.5</p>
+        </div>
+        <StatCard label="Passing" value={pass} color="text-green-600" sub="Controls passed"/>
+        <StatCard label="Failing" value={fail} color="text-red-600"   sub="Controls failed"/>
+        <StatCard label="Not Checked" value={unk} color="text-gray-400" sub="Manual review needed"/>
+      </div>
+
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-sm text-gray-500">Framework:</span>
+        {["CIS AWS","NIST 800-53","SOC 2","PCI-DSS","ISO 27001"].map(fw => (
+          <button key={fw} onClick={()=>setFramework(fw)}
+            className={`px-3 py-1.5 text-xs rounded-lg border font-medium transition-colors
+              ${framework===fw ? "bg-[#0F6E56] text-white border-teal-600" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}>
+            {fw}
+          </button>
+        ))}
+        {framework!=="CIS AWS" && (
+          <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2 py-1 rounded">Demo: showing CIS AWS data</span>
+        )}
+      </div>
+
+      {Object.entries(CIS_SECTIONS).map(([sec, title]) => {
+        const controls = CIS_CONTROLS.filter(c=>c.section===sec);
+        const sPass = controls.filter(c=>c.status==="PASS").length;
+        const sFail = controls.filter(c=>c.status==="FAIL").length;
+        return (
+          <div key={sec} className="bg-white rounded-xl border border-gray-200">
+            <button onClick={()=>setOpenSec(openSec===sec ? null : sec)}
+              className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors rounded-xl">
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-mono text-gray-400 w-5 text-left">{sec}</span>
+                <p className="font-medium text-sm text-gray-700">{title}</p>
+                {sFail > 0 && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-medium">{sFail} failing</span>}
+              </div>
+              <div className="flex items-center gap-4">
+                <span className="text-xs text-gray-400">{sPass}/{sPass+sFail} passed</span>
+                <span className="text-gray-300 text-sm">{openSec===sec ? "▲" : "▼"}</span>
+              </div>
+            </button>
+            {openSec===sec && (
+              <div className="border-t border-gray-100 divide-y divide-gray-50">
+                {controls.map(c => (
+                  <div key={c.id} className="px-4 py-3 flex items-center gap-3">
+                    <span className="text-xs font-mono text-gray-400 w-12 flex-shrink-0">{c.id}</span>
+                    <p className="flex-1 text-sm text-gray-700">{c.title}</p>
+                    {c.fid && <span className="text-xs font-mono text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded">{c.fid}</span>}
+                    <span className={"text-xs px-2 py-0.5 rounded font-semibold flex-shrink-0 " + statusCls[c.status]}>
+                      {c.status === "UNKNOWN" ? "N/A" : c.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Inventory ─────────────────────────────────────────────────────────────────
+
+function InventoryPage() {
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("ALL");
+  const types = ["ALL"].concat([...new Set(INVENTORY.map(i=>i.type))]);
+  const rows = INVENTORY
+    .filter(i => typeFilter==="ALL" || i.type===typeFilter)
+    .filter(i => !search || i.name.toLowerCase().includes(search.toLowerCase()) || i.type.toLowerCase().includes(search.toLowerCase()));
+
+  const riskBadge = {
+    CRITICAL:"bg-red-100 text-red-700",
+    HIGH:    "bg-orange-100 text-orange-700",
+    MEDIUM:  "bg-amber-100 text-amber-700",
+    CLEAN:   "bg-green-100 text-green-700",
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-4 gap-4">
+        <StatCard label="Total Assets"   value={INVENTORY.length} color="text-gray-800"/>
+        <StatCard label="At Risk"        value={INVENTORY.filter(i=>i.risk!=="CLEAN").length} color="text-red-600"/>
+        <StatCard label="Clean"          value={INVENTORY.filter(i=>i.risk==="CLEAN").length}  color="text-green-600"/>
+        <StatCard label="Resource Types" value={new Set(INVENTORY.map(i=>i.type)).size}        color="text-teal-600"/>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200">
+        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
+          <p className="font-medium text-sm text-gray-700">Asset Inventory <span className="text-gray-400">({rows.length})</span></p>
+          <div className="flex items-center gap-2">
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search assets..."
+              className="border border-gray-200 rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:border-teal-400 w-40"/>
+            <select value={typeFilter} onChange={e=>setTypeFilter(e.target.value)}
+              className="border border-gray-200 rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:border-teal-400 bg-white">
+              {types.map(t=><option key={t}>{t}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-100 text-xs text-gray-400 uppercase tracking-wider text-left">
+                {["Asset ID","Name","Type","Region","Risk","Findings"].map(h=>(
+                  <th key={h} className="px-4 py-3 font-semibold">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(item => (
+                <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                  <td className="px-4 py-3 font-mono text-xs text-gray-400">{item.id}</td>
+                  <td className="px-4 py-3 font-medium text-gray-800">{item.name}</td>
+                  <td className="px-4 py-3 text-gray-500">{item.type}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-gray-500">{item.region}</td>
+                  <td className="px-4 py-3">
+                    <span className={"text-xs px-2 py-0.5 rounded font-semibold " + (riskBadge[item.risk]||"bg-gray-100 text-gray-500")}>{item.risk}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {item.findings > 0
+                      ? <span className="text-xs font-semibold text-red-600 bg-red-50 px-2 py-0.5 rounded">{item.findings} finding{item.findings>1?"s":""}</span>
+                      : <span className="text-xs text-green-600">Clean</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Reports ───────────────────────────────────────────────────────────────────
+
+function ReportsPage({ findings, stats }) {
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  const downloadCSV = () => {
+    const headers = ["ID","Resource","Resource Type","Region","Finding","Severity","Service","Risk Score","CIS Control","Remediation"];
+    const rows = findings.map(f => [
+      f.id, '"'+f.resource+'"', f.resource_type, f.region,
+      '"'+f.finding+'"', f.severity, f.service, f.risk_score,
+      f.cis_control, '"'+f.remediation+'"'
+    ]);
+    const csv = [headers].concat(rows).map(r=>r.join(",")).join("\n");
+    const url = URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "shieldscan-"+new Date().toISOString().slice(0,10)+".csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadJSON = () => {
+    const report = {
+      generated_at: new Date().toISOString(),
+      account_id: "123456789012",
+      risk_score: stats.risk_score,
+      summary: { total:stats.total, critical:stats.critical, high:stats.high, medium:stats.medium },
+      findings: findings,
+    };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:"application/json"}));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "shieldscan-"+new Date().toISOString().slice(0,10)+".json";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const openPDF = async () => {
+    setPdfLoading(true);
+    await new Promise(r=>setTimeout(r,300));
+    const date = new Date().toLocaleDateString("en-GB",{year:"numeric",month:"long",day:"numeric"});
+    const sevColor = {CRITICAL:"#dc2626",HIGH:"#ea580c",MEDIUM:"#ca8a04",LOW:"#2563eb"};
+    const rows = findings.map(f=>"<tr style='border-bottom:1px solid #f3f4f6'><td style='padding:7px 10px;font-family:monospace;font-size:11px;color:#9ca3af'>"+f.id+"</td><td style='padding:7px 10px;font-size:12px;font-weight:500'>"+f.resource+"</td><td style='padding:7px 10px;font-size:12px'>"+f.finding+"</td><td style='padding:7px 10px'><span style='background:"+(sevColor[f.severity]||"#6b7280")+";color:#fff;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600'>"+f.severity+"</span></td><td style='padding:7px 10px;font-size:12px;font-weight:700;color:"+riskColor(f.risk_score)+"'>"+f.risk_score+"</td><td style='padding:7px 10px;font-size:11px;color:#6b7280'>"+f.remediation.slice(0,55)+"...</td></tr>").join("");
+    const cards = [["Risk Score",stats.risk_score+"/100","#0F6E56"],["Total",stats.total,"#374151"],["Critical",stats.critical,"#dc2626"],["High",stats.high,"#ea580c"]].map(function(x){return "<div style='border:1px solid #e5e7eb;border-radius:10px;padding:14px'><p style='margin:0;font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em'>"+x[0]+"</p><p style='margin:8px 0 0;font-size:28px;font-weight:700;color:"+x[2]+"'>"+x[1]+"</p></div>";}).join("");
+    const win = window.open("","_blank");
+    win.document.write("<!DOCTYPE html><html><head><title>ShieldScan Audit Report</title><style>body{font-family:system-ui,sans-serif;margin:0;padding:40px;color:#111827}table{width:100%;border-collapse:collapse}th{background:#f9fafb;padding:9px 10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;border-bottom:2px solid #e5e7eb}@media print{body{padding:20px}.no-print{display:none}}</style></head><body><div style='display:flex;align-items:center;gap:16px;margin-bottom:28px;padding-bottom:18px;border-bottom:3px solid #0F6E56'><div style='font-size:48px'>S</div><div><h1 style='margin:0;font-size:26px;color:#0F6E56'>ShieldScan</h1><p style='margin:4px 0 0;color:#6b7280;font-size:13px'>AWS Security Audit Report</p></div><div style='margin-left:auto;text-align:right'><p style='margin:0;font-size:12px;color:#6b7280'>"+date+"</p><p style='margin:4px 0 0;font-size:12px;color:#6b7280'>Account: 123456789012</p></div></div><div style='display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:28px'>"+cards+"</div><h2 style='font-size:14px;margin:0 0 10px;color:#374151;text-transform:uppercase;letter-spacing:.05em'>Security Findings</h2><table><thead><tr><th>ID</th><th>Resource</th><th>Finding</th><th>Severity</th><th>Risk</th><th>Remediation</th></tr></thead><tbody>"+rows+"</tbody></table><div style='margin-top:36px;padding-top:14px;border-top:1px solid #e5e7eb;font-size:11px;color:#9ca3af;text-align:center'>ShieldScan CNAPP Platform - EPITA Paris - Confidential - "+date+"</div><div class='no-print' style='margin-top:20px;text-align:center'><button onclick='window.print()' style='padding:10px 24px;background:#0F6E56;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer'>Print / Save as PDF</button></div></body></html>");
+    win.document.close();
+    setPdfLoading(false);
+  };
+
+  const cards = [
+    { icon:"CSV", title:"CSV Export", desc:"All findings as a spreadsheet. Import into Excel, Google Sheets, or your SIEM.", action:downloadCSV, label:"Download CSV" },
+    { icon:"JSON", title:"JSON Export", desc:"Machine-readable findings dump. Use for API integrations or custom tooling.", action:downloadJSON, label:"Download JSON" },
+    { icon:"PDF", title:"PDF Audit Report", desc:"Formatted audit report with executive summary and full findings table. Opens in new tab.", action:openPDF, label:pdfLoading?"Generating...":"Open PDF Report" },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-3 gap-4">
+        <StatCard label="Total Findings"  value={stats.total}          color="text-gray-800"/>
+        <StatCard label="Critical"        value={stats.critical}        color="text-red-600"/>
+        <StatCard label="Overall Risk"    value={stats.risk_score+"/100"} color="text-teal-600"/>
+      </div>
+
+      <div className="grid grid-cols-3 gap-4">
+        {cards.map(c=>(
+          <div key={c.title} className="bg-white rounded-xl border-2 border-gray-200 p-5 flex flex-col gap-4 hover:border-teal-200 hover:bg-teal-50 transition-colors cursor-pointer"
+            onClick={c.action}>
+            <div className="text-2xl font-bold text-gray-300">{c.icon}</div>
+            <div className="flex-1">
+              <p className="font-semibold text-gray-800">{c.title}</p>
+              <p className="text-sm text-gray-400 mt-1 leading-relaxed">{c.desc}</p>
+            </div>
+            <button disabled={pdfLoading && c.title==="PDF Audit Report"}
+              className="w-full py-2 bg-[#0F6E56] text-white text-sm font-medium rounded-lg hover:bg-teal-700 disabled:opacity-60 transition-colors">
+              {c.label}
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200">
+        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+          <p className="font-medium text-sm text-gray-700">Report Preview</p>
+          <span className="text-xs text-gray-400">{new Date().toLocaleDateString()}</span>
+        </div>
+        <div className="p-4">
+          <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 text-xs text-gray-600 font-mono space-y-1 leading-relaxed">
+            <p className="font-bold text-gray-800 text-sm">ShieldScan Security Audit Report</p>
+            <p>Account: 123456789012 | {new Date().toLocaleDateString()} | Regions: us-east-1, eu-west-1, global</p>
+            <p>--------------------------------------</p>
+            <p>EXECUTIVE SUMMARY</p>
+            <p>Overall Risk Score  : {stats.risk_score}/100  (High Risk)</p>
+            <p>Total Findings      : {stats.total}</p>
+            <p>Critical            : {stats.critical}  (immediate action required)</p>
+            <p>High                : {stats.high}  (fix within 24 hours)</p>
+            <p>Medium              : {stats.medium}  (fix within 7 days)</p>
+            <p>--------------------------------------</p>
+            <p>#1  F001  CRITICAL  Risk:95  S3 public access on shieldscan-prod-logs</p>
+            <p>#2  F002  CRITICAL  Risk:92  Root account has active access key</p>
+            <p>#3  F008  HIGH      Risk:76  CVE-2023-44487 in nginx:1.21</p>
+            <p className="text-gray-400">... {stats.total} findings total - export for full detail</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── AI Assistant ──────────────────────────────────────────────────────────────
+
+const SUGGESTIONS = [
+  "What are my critical findings?",
+  "Which issue should I fix first?",
+  "How do I fix S3 public access?",
+  "Explain my risk score of 68",
+  "How do I delete the root access key?",
+  "What CVEs are in my containers?",
+];
+
+function AIAssistant() {
+  const { msgs, input, setInput, loading, send } = useChat(
+    "Hi! I'm ShieldScan AI, running locally via Ollama (Llama 3.2).\n\nI have full context of your AWS scan. Ask me about findings, risk scores, or how to fix specific issues. I only answer cloud security questions."
+  );
+  const bottomRef = useRef(null);
+  useEffect(()=>{ if(bottomRef.current) bottomRef.current.scrollIntoView({behavior:"smooth"}); },[msgs, loading]);
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 flex flex-col h-full min-h-0">
+      <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0 flex items-center justify-between">
+        <div>
+          <p className="font-semibold text-sm text-gray-700">ShieldScan AI</p>
+          <p className="text-xs text-gray-400 mt-0.5">Llama 3.2 · Local · RAG-powered · Scan context injected</p>
+        </div>
+        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">Online</span>
+      </div>
+      <div className="px-4 py-2 border-b border-gray-100 flex gap-1.5 flex-wrap flex-shrink-0">
+        {SUGGESTIONS.map(s=>(
+          <button key={s} onClick={()=>setInput(s)}
+            className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded-md text-gray-600 transition-colors">{s}</button>
+        ))}
+      </div>
+      <div className="flex-1 overflow-y-auto p-4 scrollbar min-h-0">
+        {msgs.map((m,i)=><Bubble key={i} msg={m}/>)}
+        {loading && (
+          <div className="flex gap-2 mb-3 items-center">
+            <div className="w-7 h-7 rounded-full bg-[#0F6E56] flex items-center justify-center text-[10px] font-bold text-white">AI</div>
+            <div className="flex items-center gap-2 bg-gray-100 rounded-xl px-3 py-2">
+              <Spinner sz={4}/><span className="text-sm text-gray-400">Thinking...</span>
+            </div>
+          </div>
+        )}
+        <div ref={bottomRef}/>
+      </div>
+      <div className="px-4 py-3 border-t border-gray-100 flex gap-2 flex-shrink-0">
+        <input value={input} onChange={e=>setInput(e.target.value)}
+          onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey) send();}}
+          placeholder="Ask about your findings..."
+          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal-400 focus:ring-1 focus:ring-teal-100"/>
+        <button onClick={()=>send()} disabled={loading||!input.trim()}
+          className="px-4 py-2 bg-[#0F6E56] text-white text-sm font-medium rounded-lg hover:bg-teal-700 disabled:opacity-50 transition-colors">
+          Send
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+
+function SettingsPage({ user, goToView }) {
+  const [tab, setTab] = useState("profile");
+  const [saved, setSaved] = useState(false);
+  const [profile, setProfile] = useState({ name: user ? user.name : "", email: user ? user.email : "", org:"EPITA Paris" });
+  const save = () => { setSaved(true); setTimeout(()=>setSaved(false), 2000); };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-0 border-b border-gray-200">
+        {[["profile","Profile"],["aws","AWS Connection"],["notifications","Notifications"]].map(([k,l])=>(
+          <button key={k} onClick={()=>setTab(k)}
+            className={"px-4 py-2.5 text-sm font-medium border-b-2 transition-colors " + (tab===k ? "border-[#0F6E56] text-[#0F6E56]" : "border-transparent text-gray-500 hover:text-gray-700")}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {tab==="profile" && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6 max-w-lg space-y-4">
+          <h3 className="font-semibold text-gray-800">Profile Settings</h3>
+          {[["name","Full Name","text"],["email","Email","email"],["org","Organisation","text"]].map(([k,l,t])=>(
+            <div key={k}>
+              <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">{l}</label>
+              <input type={t} value={profile[k]} onChange={e=>setProfile(p=>({...p,[k]:e.target.value}))}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-teal-400"/>
+            </div>
+          ))}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">Plan</label>
+            <div className="flex items-center gap-2 p-3 bg-teal-50 border border-teal-200 rounded-lg">
+              <span className="text-teal-600 font-semibold text-sm">Free (Open-Core)</span>
+              <span className="ml-auto text-xs text-teal-600">3 AWS accounts · unlimited findings</span>
+            </div>
+          </div>
+          <button onClick={save}
+            className="px-6 py-2.5 bg-[#0F6E56] text-white text-sm font-medium rounded-lg hover:bg-teal-700 transition-colors">
+            {saved ? "Saved!" : "Save Changes"}
+          </button>
+        </div>
+      )}
+
+      {tab==="aws" && <AWSConnect onConnected={()=>goToView("dashboard")}/>}
+
+      {tab==="notifications" && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6 max-w-lg space-y-4">
+          <h3 className="font-semibold text-gray-800">Notification Preferences</h3>
+          {[
+            ["Critical findings","Alert immediately when a CRITICAL finding is detected",true],
+            ["High findings","Alert for HIGH severity findings",true],
+            ["Scan completion","Notify when a full scan finishes",true],
+            ["Weekly digest","Weekly email summary of your security posture",false],
+            ["Compliance drift","Alert when compliance score drops below threshold",false],
+          ].map(([label, desc, on])=>(
+            <div key={label} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+              <div>
+                <p className="text-sm font-medium text-gray-700">{label}</p>
+                <p className="text-xs text-gray-400">{desc}</p>
+              </div>
+              <div className={"w-10 h-6 rounded-full flex items-center px-0.5 transition-colors " + (on ? "bg-[#0F6E56]" : "bg-gray-200")}>
+                <span className={"w-5 h-5 bg-white rounded-full shadow block transition-transform " + (on ? "translate-x-4" : "translate-x-0")}></span>
+              </div>
+            </div>
+          ))}
+          <button onClick={save}
+            className="px-6 py-2.5 bg-[#0F6E56] text-white text-sm font-medium rounded-lg hover:bg-teal-700 transition-colors">
+            {saved ? "Saved!" : "Save Preferences"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Float Widget ──────────────────────────────────────────────────────────────
+
+function FloatWidget() {
+  const { msgs, input, setInput, loading, send } = useChat("Quick help - ask me anything about your scan.");
+  const [open, setOpen] = useState(false);
+  const bottomRef = useRef(null);
+  useEffect(()=>{ if(bottomRef.current) bottomRef.current.scrollIntoView({behavior:"smooth"}); },[msgs,loading]);
+  return (
+    <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-3">
+      {open && (
+        <div className="w-80 bg-white rounded-2xl border border-gray-200 shadow-2xl flex flex-col overflow-hidden" style={{height:400}}>
+          <div className="px-4 py-3 bg-[#0F6E56] text-white flex items-center justify-between flex-shrink-0">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">&#128737;&#65039;</span>
+              <div><p className="text-sm font-semibold">ShieldScan AI</p><p className="text-[10px] text-teal-200">Llama 3.2 - Local</p></div>
+            </div>
+            <button onClick={()=>setOpen(false)} className="text-white/60 hover:text-white leading-none text-xl">&#10005;</button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-3 scrollbar min-h-0">
+            {msgs.map((m,i)=><Bubble key={i} msg={m}/>)}
+            {loading && <div className="text-xs text-gray-400 animate-pulse ml-9">Thinking...</div>}
+            <div ref={bottomRef}/>
+          </div>
+          <div className="px-3 py-2 border-t border-gray-100 flex gap-2 flex-shrink-0">
+            <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter") send();}}
+              placeholder="Quick question..."
+              className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:border-teal-400"/>
+            <button onClick={()=>send()} disabled={loading||!input.trim()}
+              className="px-3 py-1.5 bg-[#0F6E56] text-white text-sm rounded-lg disabled:opacity-50 hover:bg-teal-700">Send</button>
+          </div>
+        </div>
+      )}
+      <button onClick={()=>setOpen(o=>!o)}
+        className="w-[52px] h-[52px] bg-[#0F6E56] text-white rounded-full shadow-xl flex items-center justify-center text-2xl hover:bg-teal-700 transition-colors">
+        &#128172;
+      </button>
+    </div>
+  );
+}
+
+// ── Main App ──────────────────────────────────────────────────────────────────
+
+const PAGE_TITLE = {
+  dashboard:"Dashboard", findings:"Findings", cspm:"CSPM",
+  cwpp:"CWPP", compliance:"Compliance", inventory:"Inventory",
+  reports:"Reports & Export", ai:"AI Assistant", settings:"Settings",
+};
+
+function MainApp({ user }) {
+  const [view, setView] = useState("dashboard");
+  const [findings, setFindings] = useState([]);
+  const [stats, setStats] = useState({ total:0, critical:0, high:0, medium:0, low:0, risk_score:0 });
+  const [backendErr, setBackendErr] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [lastScan, setLastScan] = useState(null);
+  const [expanded, setExpanded] = useState(null);
+  const [tips, setTips] = useState({});
+  const [tipLoading, setTipLoading] = useState({});
+
+  const load = useCallback(() => {
+    fetch(API + "/api/scan/findings")
+      .then(r=>r.json())
+      .then(d => {
+        setFindings(d.findings||[]);
+        setStats({ total:d.total, critical:d.critical, high:d.high, medium:d.medium, low:d.low||0, risk_score:d.risk_score });
+        setLastScan(new Date().toLocaleTimeString());
+        setReady(true); setBackendErr(false);
+      })
+      .catch(()=>{ setBackendErr(true); setReady(true); });
+  }, []);
+
+  useEffect(()=>{ load(); },[load]);
+
+  const runScan = async () => {
+    setScanning(true);
+    await new Promise(r=>setTimeout(r, 1800));
+    load(); setScanning(false);
+  };
+
+  const getInlineTip = async (f) => {
+    if (expanded===f.id) { setExpanded(null); return; }
+    setExpanded(f.id);
+    if (tips[f.id]) return;
+    setTipLoading(p=>({...p,[f.id]:true}));
+    try {
+      const res = await fetch(API + "/api/ai/chat", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          question:"Give a numbered 3-step remediation for finding "+f.id+": \""+f.finding+"\" on resource \""+f.resource+"\". Be concise and specific.",
+          user_id:"demo"
+        }),
+      });
+      const d = await res.json();
+      setTips(p=>({...p,[f.id]:d.response}));
+    } catch {
+      setTips(p=>({...p,[f.id]:"Backend offline - run python demo_backend.py"}));
+    }
+    setTipLoading(p=>({...p,[f.id]:false}));
+  };
+
+  const showScanBtn = !["settings","ai"].includes(view);
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-gray-50">
+      <Sidebar view={view} setView={setView} user={user}/>
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+        <TopBar title={PAGE_TITLE[view]} lastScan={showScanBtn ? lastScan : null}
+          onScan={showScanBtn ? runScan : null} scanning={scanning}/>
+
+        {backendErr && (
+          <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex-shrink-0">
+            Cannot reach localhost:8000 - run <code className="font-mono bg-red-100 px-1 rounded">python demo_backend.py</code> then refresh.
+          </div>
+        )}
+
+        <main className="flex-1 overflow-y-auto scrollbar p-6 min-h-0">
+          {!ready ? (
+            <div className="flex items-center justify-center h-48 gap-2 text-gray-400">
+              <Spinner/><span className="text-sm">Loading scan data...</span>
+            </div>
+          ) : (
+            <div>
+              {view==="dashboard"  && <Dashboard findings={findings} stats={stats} onTip={getInlineTip} tips={tips} tipLoading={tipLoading} expanded={expanded}/>}
+              {view==="findings"   && <FindingsTable findings={findings} onTip={getInlineTip} tips={tips} tipLoading={tipLoading} expanded={expanded}/>}
+              {view==="cspm"       && <CSPMPage findings={findings}/>}
+              {view==="cwpp"       && <CWPPPage findings={findings}/>}
+              {view==="compliance" && <CompliancePage/>}
+              {view==="inventory"  && <InventoryPage/>}
+              {view==="reports"    && <ReportsPage findings={findings} stats={stats}/>}
+              {view==="ai"         && <div style={{height:"calc(100vh - 140px)"}}><AIAssistant/></div>}
+              {view==="settings"   && <SettingsPage user={user} goToView={setView}/>}
+            </div>
+          )}
+        </main>
+      </div>
+      <FloatWidget/>
+    </div>
+  );
+}
+
+// ── Root ──────────────────────────────────────────────────────────────────────
+
+function App() {
+  const [authPage, setAuthPage] = useState("login");
+  const [user, setUser] = useState(null);
+
+  if (!user) {
+    if (authPage === "login") {
+      return React.createElement(LoginPage, { onLogin:setUser, onGoSignup:()=>setAuthPage("signup") });
+    }
+    return React.createElement(SignupPage, { onSignup:setUser, onGoLogin:()=>setAuthPage("login") });
+  }
+  return React.createElement(MainApp, { user:user });
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+</script>
+</body>
+</html>

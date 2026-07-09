@@ -1,0 +1,1176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ShieldScan — Admin</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    /* ══════ RESET & TOKENS ══════ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --surface2:  #1c2128;
+      --border:    #30363d;
+      --accent:    #238636;
+      --accent-h:  #2ea043;
+      --danger:    #da3633;
+      --danger-h:  #f85149;
+      --warn:      #e3b341;
+      --blue:      #58a6ff;
+      --purple:    #bc8cff;
+      --orange:    #d29922;
+      --text:      #e6edf3;
+      --muted:     #8b949e;
+      --radius:    8px;
+      --sidebar-w: 220px;
+      --topbar-h:  54px;
+    }
+    html, body { height: 100%; background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; }
+    a { color: var(--blue); text-decoration: none; }
+    button { cursor: pointer; border: none; border-radius: var(--radius); font-size: 13px;
+      padding: 6px 14px; transition: background .15s, opacity .15s; }
+    input, select { outline: none; font-size: 13px; }
+    table { border-collapse: collapse; width: 100%; }
+    th { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px;
+      color: var(--muted); text-align: left; padding: 10px 14px; white-space: nowrap; }
+    td { padding: 9px 14px; border-top: 1px solid var(--border); vertical-align: middle; }
+    tr:hover td { background: rgba(255,255,255,.018); }
+
+    /* ══════ BUTTONS ══════ */
+    .btn { display: inline-flex; align-items: center; gap: 5px; }
+    .btn-primary  { background: var(--accent); color: #fff; }
+    .btn-primary:hover  { background: var(--accent-h); }
+    .btn-danger   { background: rgba(218,54,51,.15); color: var(--danger-h); border: 1px solid rgba(218,54,51,.3); }
+    .btn-danger:hover   { background: rgba(218,54,51,.28); }
+    .btn-warn     { background: rgba(227,179,65,.12); color: var(--warn); border: 1px solid rgba(227,179,65,.25); }
+    .btn-warn:hover     { background: rgba(227,179,65,.22); }
+    .btn-blue     { background: rgba(88,166,255,.12); color: var(--blue); border: 1px solid rgba(88,166,255,.25); }
+    .btn-blue:hover     { background: rgba(88,166,255,.22); }
+    .btn-green    { background: rgba(35,134,54,.15); color: #3fb950; border: 1px solid rgba(35,134,54,.3); }
+    .btn-green:hover    { background: rgba(35,134,54,.28); }
+    .btn-ghost    { background: #21262d; color: var(--text); }
+    .btn-ghost:hover    { background: #30363d; }
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+    .btn-full { width: 100%; justify-content: center; padding: 11px; font-size: 15px; font-weight: 600; }
+
+    /* ══════ BADGES ══════ */
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+    .badge-green  { background: rgba(63,185,80,.15);  color: #3fb950; }
+    .badge-red    { background: rgba(248,81,73,.15);  color: var(--danger-h); }
+    .badge-yellow { background: rgba(227,179,65,.15); color: var(--warn); }
+    .badge-blue   { background: rgba(88,166,255,.15); color: var(--blue); }
+    .badge-purple { background: rgba(188,140,255,.15);color: var(--purple); }
+    .badge-gray   { background: rgba(139,148,158,.12);color: var(--muted); }
+    .badge-orange { background: rgba(210,153,34,.15); color: var(--orange); }
+
+    /* ══════ INPUTS ══════ */
+    .input {
+      background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+      color: var(--text); padding: 8px 12px; width: 100%;
+      transition: border-color .2s;
+    }
+    .input:focus { border-color: var(--blue); }
+    .input-sm { padding: 5px 10px; }
+    select.input option { background: var(--surface); }
+
+    /* ══════ LOGIN SCREEN ══════ */
+    #login-screen {
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; padding: 24px;
+    }
+    .login-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 40px; width: 100%; max-width: 400px;
+    }
+    .login-logo { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+    .login-logo h1 { font-size: 20px; font-weight: 700; }
+    .login-logo .icon { font-size: 26px; }
+    .login-sub { color: var(--muted); font-size: 13px; margin-bottom: 28px;
+      padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+    .form-label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; margin-top: 14px; }
+    .err { color: var(--danger-h); font-size: 13px; margin-top: 10px; min-height: 18px; }
+
+    /* ══════ APP LAYOUT ══════ */
+    #app { display: none; min-height: 100vh; }
+
+    /* Sidebar */
+    .sidebar {
+      position: fixed; left: 0; top: 0; bottom: 0;
+      width: var(--sidebar-w);
+      background: var(--surface); border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; z-index: 20;
+    }
+    .sidebar-logo {
+      padding: 16px 18px; display: flex; align-items: center; gap: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-logo .icon { font-size: 22px; }
+    .sidebar-logo .name { font-size: 15px; font-weight: 700; }
+    .sidebar-logo .sub  { font-size: 10px; color: var(--muted); }
+    .sidebar-nav { flex: 1; padding: 10px 8px; overflow-y: auto; }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 12px; border-radius: var(--radius);
+      color: var(--muted); cursor: pointer; transition: all .15s;
+      margin-bottom: 2px; font-size: 13px;
+    }
+    .nav-item:hover  { background: var(--surface2); color: var(--text); }
+    .nav-item.active { background: rgba(88,166,255,.12); color: var(--blue); }
+    .nav-item .icon  { font-size: 15px; width: 18px; text-align: center; }
+    .nav-section { font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .8px; color: var(--muted); padding: 14px 12px 4px; }
+    .sidebar-bottom {
+      padding: 14px 16px; border-top: 1px solid var(--border);
+      font-size: 12px;
+    }
+    .sidebar-bottom .admin-name { font-weight: 600; margin-bottom: 2px; }
+    .sidebar-bottom .admin-email { color: var(--muted); margin-bottom: 10px; font-size: 11px; }
+
+    /* Main area */
+    .main-area {
+      margin-left: var(--sidebar-w);
+      min-height: 100vh;
+      display: flex; flex-direction: column;
+    }
+
+    /* Topbar */
+    .topbar {
+      position: sticky; top: 0; z-index: 10;
+      background: rgba(13,17,23,.85); backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--border);
+      height: var(--topbar-h);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 24px;
+    }
+    .topbar-left { display: flex; align-items: center; gap: 10px; }
+    .topbar-left h2 { font-size: 16px; font-weight: 600; }
+    .topbar-right { display: flex; align-items: center; gap: 10px; }
+    .topbar-pill {
+      background: rgba(227,179,65,.15); color: var(--warn);
+      border: 1px solid rgba(227,179,65,.3);
+      font-size: 11px; font-weight: 700; padding: 3px 10px;
+      border-radius: 20px; letter-spacing: .4px;
+    }
+
+    /* Content */
+    .content { flex: 1; padding: 24px; }
+    .section { display: none; }
+    .section.active { display: block; }
+
+    /* ══════ CARDS & GRIDS ══════ */
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px;
+    }
+    .card-title { font-size: 13px; font-weight: 600; color: var(--muted);
+      margin-bottom: 14px; display: flex; align-items: center; gap: 6px; }
+
+    /* Stat cards */
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .stat-card { background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 16px 18px; }
+    .stat-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; font-weight: 500; }
+    .stat-value { font-size: 28px; font-weight: 700; line-height: 1; }
+    .stat-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .color-green  { color: #3fb950; }
+    .color-red    { color: var(--danger-h); }
+    .color-yellow { color: var(--warn); }
+    .color-blue   { color: var(--blue); }
+    .color-purple { color: var(--purple); }
+
+    /* Charts row */
+    .charts-row { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 20px; }
+    .chart-wrap { position: relative; }
+    .chart-canvas-wrap { position: relative; height: 200px; }
+
+    /* Recent tables row */
+    .recent-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+
+    /* ══════ TABLE CONTAINER ══════ */
+    .table-wrap {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden;
+    }
+    .table-head {
+      background: rgba(13,17,23,.5);
+    }
+    .loading-row td { text-align: center; padding: 36px; color: var(--muted); }
+    .no-data td { text-align: center; padding: 36px; color: var(--muted); }
+
+    /* Section controls */
+    .controls-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; margin-bottom: 14px; flex-wrap: wrap;
+    }
+    .controls-left  { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .controls-right { display: flex; align-items: center; gap: 10px; }
+    .section-title { font-size: 16px; font-weight: 600; }
+
+    /* Pagination */
+    .pagination {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px; border-top: 1px solid var(--border);
+      font-size: 12px; color: var(--muted);
+    }
+    .pagination-btns { display: flex; gap: 6px; }
+
+    /* Risk score bar */
+    .risk-bar { display: flex; align-items: center; gap: 8px; }
+    .risk-bg { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; max-width: 80px; }
+    .risk-fill { height: 100%; border-radius: 3px; }
+
+    /* ══════ ACTION BUTTONS ══════ */
+    .actions { display: flex; gap: 5px; flex-wrap: wrap; }
+
+    /* ══════ MODAL ══════ */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.7);
+      display: none; align-items: center; justify-content: center; z-index: 50;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 28px 32px; max-width: 480px; width: 90%;
+      animation: modal-in .15s ease;
+    }
+    @keyframes modal-in { from { transform: scale(.96); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    .modal h3 { font-size: 18px; margin-bottom: 8px; }
+    .modal p  { color: var(--muted); font-size: 13px; line-height: 1.6; margin-bottom: 20px; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+    /* User detail modal (wider) */
+    .modal-wide { max-width: 560px; }
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 20px; margin-bottom: 18px; }
+    .detail-item .dk { font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+    .detail-item .dv { font-size: 13px; font-weight: 500; word-break: break-all; }
+    .detail-sep { grid-column: 1/-1; border-top: 1px solid var(--border); margin: 4px 0; }
+
+    /* ══════ SYSTEM SECTION ══════ */
+    .system-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+    /* ══════ SPINNER ══════ */
+    .spinner {
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid var(--border); border-top-color: var(--blue);
+      border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle; margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ══════ TOAST ══════ */
+    #toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text); padding: 12px 18px; border-radius: var(--radius);
+      font-size: 13px; z-index: 100; display: none; max-width: 320px;
+      animation: slide-up .2s ease;
+    }
+    @keyframes slide-up { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    #toast.success { border-color: #3fb950; }
+    #toast.error   { border-color: var(--danger-h); color: var(--danger-h); }
+
+    /* ══════ MISC ══════ */
+    .mt-4  { margin-top: 16px; }
+    .flex  { display: flex; align-items: center; }
+    .gap-2 { gap: 8px; }
+    .fw6   { font-weight: 600; }
+    .text-muted { color: var(--muted); }
+    .text-sm    { font-size: 12px; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════
+     LOGIN SCREEN
+═══════════════════════════════════════════ -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <span class="icon">🛡️</span>
+      <div>
+        <h1>ShieldScan</h1>
+      </div>
+    </div>
+    <p class="login-sub">Admin portal — restricted access only</p>
+
+    <label class="form-label">Email address</label>
+    <input class="input" type="email" id="login-email" placeholder="admin@shieldscan.com" autocomplete="username" />
+
+    <label class="form-label">Password</label>
+    <input class="input" type="password" id="login-pwd" placeholder="••••••••" autocomplete="current-password" />
+
+    <p class="err" id="login-err"></p>
+    <button class="btn btn-primary btn-full mt-4" id="login-btn" onclick="doLogin()">Sign in</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     MAIN APP
+═══════════════════════════════════════════ -->
+<div id="app">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <span class="icon">🛡️</span>
+      <div>
+        <div class="name">ShieldScan</div>
+        <div class="sub">Admin Panel</div>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-section">Overview</div>
+      <div class="nav-item active" onclick="showSection('dashboard', this)">
+        <span class="icon">📊</span> Dashboard
+      </div>
+
+      <div class="nav-section">Management</div>
+      <div class="nav-item" onclick="showSection('users', this)">
+        <span class="icon">👥</span> Users
+      </div>
+      <div class="nav-item" onclick="showSection('scans', this)">
+        <span class="icon">🔍</span> Scans
+      </div>
+
+      <div class="nav-section">Info</div>
+      <div class="nav-item" onclick="showSection('system', this)">
+        <span class="icon">⚙️</span> System
+      </div>
+    </nav>
+
+    <div class="sidebar-bottom">
+      <div class="admin-name" id="sb-name">Admin</div>
+      <div class="admin-email" id="sb-email">—</div>
+      <button class="btn btn-ghost btn-sm" style="width:100%" onclick="doLogout()">Sign out</button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="main-area">
+    <header class="topbar">
+      <div class="topbar-left">
+        <h2 id="topbar-title">Dashboard</h2>
+        <span class="topbar-pill">ADMIN</span>
+      </div>
+      <div class="topbar-right">
+        <button class="btn btn-ghost btn-sm" onclick="refreshCurrent()">↻ Refresh</button>
+      </div>
+    </header>
+
+    <main class="content">
+
+      <!-- ── DASHBOARD ── -->
+      <div class="section active" id="section-dashboard">
+
+        <!-- Stat cards -->
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-label">Total Users</div>
+            <div class="stat-value" id="s-total">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Active</div>
+            <div class="stat-value color-green" id="s-active">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Soft-Deleted</div>
+            <div class="stat-value color-red" id="s-deleted">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Admins</div>
+            <div class="stat-value color-yellow" id="s-admins">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Locked Out</div>
+            <div class="stat-value color-red" id="s-locked">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">AWS Connected</div>
+            <div class="stat-value color-blue" id="s-aws">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Total Scans</div>
+            <div class="stat-value color-blue" id="s-scans">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Total Findings</div>
+            <div class="stat-value color-purple" id="s-findings">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">New (7 days)</div>
+            <div class="stat-value color-green" id="s-new">—</div>
+          </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="charts-row">
+          <div class="card chart-wrap">
+            <div class="card-title">📈 Scans — Last 7 Days</div>
+            <div class="chart-canvas-wrap">
+              <canvas id="chart-scans"></canvas>
+            </div>
+          </div>
+          <div class="card chart-wrap">
+            <div class="card-title">🎯 Findings by Severity</div>
+            <div class="chart-canvas-wrap">
+              <canvas id="chart-severity"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent rows -->
+        <div class="recent-row">
+          <div>
+            <div class="controls-bar">
+              <span class="fw6">Recent Users</span>
+              <button class="btn btn-ghost btn-sm" onclick="showSection('users', document.querySelector('.nav-item:nth-child(4)'))">View all →</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead class="table-head">
+                  <tr><th>ID</th><th>Name / Email</th><th>Status</th><th>Joined</th></tr>
+                </thead>
+                <tbody id="recent-users-tbody">
+                  <tr class="loading-row"><td colspan="4"><span class="spinner"></span>Loading…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div>
+            <div class="controls-bar">
+              <span class="fw6">Recent Scans</span>
+              <button class="btn btn-ghost btn-sm" onclick="showSection('scans', document.querySelector('.nav-item:nth-child(5)'))">View all →</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead class="table-head">
+                  <tr><th>ID</th><th>User</th><th>Status</th><th>Risk</th><th>C/H</th></tr>
+                </thead>
+                <tbody id="recent-scans-tbody">
+                  <tr class="loading-row"><td colspan="5"><span class="spinner"></span>Loading…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /dashboard -->
+
+      <!-- ── USERS ── -->
+      <div class="section" id="section-users">
+        <div class="controls-bar">
+          <div class="controls-left">
+            <input class="input input-sm" type="search" id="user-search"
+              placeholder="Search email or name…" style="width:220px" oninput="debounce('user', ()=>loadUsers(1))" />
+            <select class="input input-sm" id="user-status-filter" onchange="loadUsers(1)" style="width:130px">
+              <option value="">All statuses</option>
+              <option value="active">Active</option>
+              <option value="disabled">Disabled</option>
+              <option value="deleted">Deleted</option>
+              <option value="admin">Admin only</option>
+            </select>
+          </div>
+          <div class="controls-right">
+            <span class="text-sm text-muted" id="users-count"></span>
+            <button class="btn btn-ghost btn-sm" onclick="loadUsers(currentUsersPage)">↻</button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead class="table-head">
+              <tr>
+                <th>ID</th>
+                <th>Name / Email</th>
+                <th>Status</th>
+                <th>Role</th>
+                <th>AWS</th>
+                <th>2FA</th>
+                <th>Scans</th>
+                <th>Registered</th>
+                <th>Deleted</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="users-tbody">
+              <tr class="loading-row"><td colspan="10"><span class="spinner"></span>Loading…</td></tr>
+            </tbody>
+          </table>
+          <div class="pagination">
+            <span id="users-page-info">—</span>
+            <div class="pagination-btns">
+              <button class="btn btn-ghost btn-sm" id="users-prev" onclick="loadUsers(currentUsersPage-1)" disabled>← Prev</button>
+              <button class="btn btn-ghost btn-sm" id="users-next" onclick="loadUsers(currentUsersPage+1)" disabled>Next →</button>
+            </div>
+          </div>
+        </div>
+      </div><!-- /users -->
+
+      <!-- ── SCANS ── -->
+      <div class="section" id="section-scans">
+        <div class="controls-bar">
+          <div class="controls-left">
+            <select class="input input-sm" id="scan-status-filter" onchange="loadScans(1)" style="width:150px">
+              <option value="">All statuses</option>
+              <option value="PENDING">Pending</option>
+              <option value="RUNNING">Running</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="FAILED">Failed</option>
+            </select>
+          </div>
+          <div class="controls-right">
+            <span class="text-sm text-muted" id="scans-count"></span>
+            <button class="btn btn-ghost btn-sm" onclick="loadScans(currentScansPage)">↻</button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead class="table-head">
+              <tr>
+                <th>ID</th>
+                <th>User</th>
+                <th>Status</th>
+                <th>Risk Score</th>
+                <th>Critical</th>
+                <th>High</th>
+                <th>Medium</th>
+                <th>Low</th>
+                <th>Findings</th>
+                <th>Started</th>
+                <th>Completed</th>
+              </tr>
+            </thead>
+            <tbody id="scans-tbody">
+              <tr class="loading-row"><td colspan="11"><span class="spinner"></span>Loading…</td></tr>
+            </tbody>
+          </table>
+          <div class="pagination">
+            <span id="scans-page-info">—</span>
+            <div class="pagination-btns">
+              <button class="btn btn-ghost btn-sm" id="scans-prev" onclick="loadScans(currentScansPage-1)" disabled>← Prev</button>
+              <button class="btn btn-ghost btn-sm" id="scans-next" onclick="loadScans(currentScansPage+1)" disabled>Next →</button>
+            </div>
+          </div>
+        </div>
+      </div><!-- /scans -->
+
+      <!-- ── SYSTEM ── -->
+      <div class="section" id="section-system">
+        <div class="system-grid">
+          <div class="card">
+            <div class="card-title">🖥️ Platform Stats</div>
+            <div id="system-stats-body" style="font-size:13px; color:var(--muted)">
+              <span class="spinner"></span> Loading…
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">👤 Admin Session</div>
+            <div style="font-size:13px">
+              <div class="detail-item" style="margin-bottom:10px">
+                <div class="dk">Logged in as</div>
+                <div class="dv" id="sys-admin-email">—</div>
+              </div>
+              <div class="detail-item" style="margin-bottom:10px">
+                <div class="dk">API Base URL</div>
+                <div class="dv" id="sys-api-url">—</div>
+              </div>
+              <div class="detail-item">
+                <div class="dk">Admin credentials</div>
+                <div class="dv">admin@shieldscan.com</div>
+              </div>
+            </div>
+          </div>
+          <div class="card" style="grid-column:1/-1">
+            <div class="card-title">🔗 API Endpoints</div>
+            <table style="font-size:12px">
+              <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><span class="badge badge-blue">POST</span></td><td><code>/api/admin/login</code></td><td>Admin login</td></tr>
+                <tr><td><span class="badge badge-green">GET</span></td><td><code>/api/admin/stats</code></td><td>Platform stats</td></tr>
+                <tr><td><span class="badge badge-green">GET</span></td><td><code>/api/admin/overview</code></td><td>Dashboard overview data</td></tr>
+                <tr><td><span class="badge badge-green">GET</span></td><td><code>/api/admin/users</code></td><td>Paginated user list</td></tr>
+                <tr><td><span class="badge badge-yellow">PATCH</span></td><td><code>/api/admin/users/{id}</code></td><td>Update user (activate / admin / restore)</td></tr>
+                <tr><td><span class="badge badge-red">DELETE</span></td><td><code>/api/admin/users/{id}</code></td><td>Hard-delete user permanently</td></tr>
+                <tr><td><span class="badge badge-green">GET</span></td><td><code>/api/admin/scans</code></td><td>All scans paginated</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div><!-- /system -->
+
+    </main>
+  </div>
+</div><!-- /app -->
+
+<!-- Hard-delete confirm modal -->
+<div class="modal-overlay" id="delete-modal">
+  <div class="modal">
+    <h3>⚠️ Permanently Delete User</h3>
+    <p id="delete-modal-body">This action cannot be undone.</p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('delete-modal')">Cancel</button>
+      <button class="btn btn-danger" id="delete-confirm-btn">Delete permanently</button>
+    </div>
+  </div>
+</div>
+
+<!-- User detail modal -->
+<div class="modal-overlay" id="user-detail-modal">
+  <div class="modal modal-wide">
+    <h3 id="ud-title">User Details</h3>
+    <div class="detail-grid" id="ud-grid"></div>
+    <div class="modal-actions" id="ud-actions">
+      <button class="btn btn-ghost" onclick="closeModal('user-detail-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════
+// Config & State
+// ═══════════════════════════════════════════
+// Always target the backend directly — works whether opened from
+// localhost:3000, localhost:8000/admin, or as a file:// URL.
+const API = 'http://localhost:8000';
+
+let adminToken    = sessionStorage.getItem('ss_admin_tok') || null;
+let adminEmail    = sessionStorage.getItem('ss_admin_email') || '';
+let currentSection = 'dashboard';
+let currentUsersPage = 1;
+let totalUsersPages  = 1;
+let currentScansPage = 1;
+let totalScansPages  = 1;
+let chartScans    = null;
+let chartSeverity = null;
+let debounceTimers = {};
+let pendingDeleteId = null;
+
+// ═══════════════════════════════════════════
+// Init
+// ═══════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', () => {
+  if (adminToken) {
+    enterDashboard();
+  }
+  document.getElementById('login-pwd').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doLogin();
+  });
+});
+
+// ═══════════════════════════════════════════
+// Auth
+// ═══════════════════════════════════════════
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pwd   = document.getElementById('login-pwd').value;
+  const errEl = document.getElementById('login-err');
+  const btn   = document.getElementById('login-btn');
+  errEl.textContent = '';
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  try {
+    const res  = await fetch(`${API}/api/admin/login`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: pwd }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Login failed');
+    adminToken = data.access_token;
+    adminEmail = data.email;
+    sessionStorage.setItem('ss_admin_tok', adminToken);
+    sessionStorage.setItem('ss_admin_email', adminEmail);
+    enterDashboard();
+  } catch (err) {
+    errEl.textContent = err.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Sign in';
+  }
+}
+
+function doLogout() {
+  adminToken = null; adminEmail = '';
+  sessionStorage.removeItem('ss_admin_tok');
+  sessionStorage.removeItem('ss_admin_email');
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+}
+
+function enterDashboard() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  document.getElementById('sb-email').textContent = adminEmail;
+  document.getElementById('sb-name').textContent  = adminEmail.split('@')[0];
+  document.getElementById('sys-admin-email').textContent = adminEmail;
+  document.getElementById('sys-api-url').textContent = API || window.location.origin;
+  loadDashboard();
+}
+
+// ═══════════════════════════════════════════
+// API helper
+// ═══════════════════════════════════════════
+async function apiFetch(path, opts = {}) {
+  const res = await fetch(`${API}${path}`, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}`, ...(opts.headers||{}) },
+  });
+  if (res.status === 401 || res.status === 403) { doLogout(); throw new Error('Session expired.'); }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+  return data;
+}
+
+// ═══════════════════════════════════════════
+// Navigation
+// ═══════════════════════════════════════════
+const sectionTitles = {
+  dashboard: 'Dashboard',
+  users:     'User Management',
+  scans:     'Scans',
+  system:    'System',
+};
+
+function showSection(name, navEl) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById(`section-${name}`).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  if (navEl) navEl.classList.add('active');
+  document.getElementById('topbar-title').textContent = sectionTitles[name] || name;
+  currentSection = name;
+  if (name === 'users')     loadUsers(1);
+  if (name === 'scans')     loadScans(1);
+  if (name === 'system')    loadSystemStats();
+  if (name === 'dashboard') loadDashboard();
+}
+
+function refreshCurrent() {
+  if (currentSection === 'dashboard') loadDashboard();
+  if (currentSection === 'users')     loadUsers(currentUsersPage);
+  if (currentSection === 'scans')     loadScans(currentScansPage);
+  if (currentSection === 'system')    loadSystemStats();
+}
+
+// ═══════════════════════════════════════════
+// Dashboard
+// ═══════════════════════════════════════════
+async function loadDashboard() {
+  loadStats();
+  loadOverview();
+}
+
+async function loadStats() {
+  try {
+    const s = await apiFetch('/api/admin/stats');
+    document.getElementById('s-total').textContent    = s.total_users;
+    document.getElementById('s-active').textContent   = s.active_users;
+    document.getElementById('s-deleted').textContent  = s.deleted_users;
+    document.getElementById('s-admins').textContent   = s.admin_users;
+    document.getElementById('s-locked').textContent   = s.locked_users;
+    document.getElementById('s-aws').textContent      = s.aws_connected;
+    document.getElementById('s-scans').textContent    = s.total_scans;
+    document.getElementById('s-findings').textContent = s.total_findings;
+    document.getElementById('s-new').textContent      = s.new_this_week;
+  } catch(e) { console.error('stats', e); }
+}
+
+async function loadOverview() {
+  try {
+    const d = await apiFetch('/api/admin/overview');
+    renderChartScans(d.scans_per_day);
+    renderChartSeverity(d.findings_by_severity);
+    renderRecentUsers(d.recent_users);
+    renderRecentScans(d.recent_scans);
+  } catch(e) {
+    console.error('overview', e);
+    renderChartScans([]);
+    renderChartSeverity({});
+  }
+}
+
+function renderChartScans(data) {
+  const labels = data.map(d => d.date);
+  const values = data.map(d => d.count);
+  const ctx = document.getElementById('chart-scans').getContext('2d');
+  if (chartScans) chartScans.destroy();
+  chartScans = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Scans',
+        data: values,
+        backgroundColor: 'rgba(88,166,255,.25)',
+        borderColor: 'rgba(88,166,255,.8)',
+        borderWidth: 1,
+        borderRadius: 4,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ${c.parsed.y} scan${c.parsed.y!==1?'s':''}` } } },
+      scales: {
+        x: { grid: { color: '#30363d' }, ticks: { color: '#8b949e', font: { size: 11 } } },
+        y: { grid: { color: '#30363d' }, ticks: { color: '#8b949e', precision: 0, font: { size: 11 } }, beginAtZero: true },
+      },
+    },
+  });
+}
+
+function renderChartSeverity(data) {
+  const total = Object.values(data).reduce((a,b) => a+b, 0);
+  const ctx = document.getElementById('chart-severity').getContext('2d');
+  if (chartSeverity) chartSeverity.destroy();
+  if (total === 0) {
+    chartSeverity = new Chart(ctx, {
+      type: 'doughnut',
+      data: { labels: ['No findings'], datasets: [{ data: [1], backgroundColor: ['#30363d'], borderWidth: 0 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#8b949e', font: { size: 12 } } } } },
+    });
+    return;
+  }
+  chartSeverity = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels:   ['Critical', 'High', 'Medium', 'Low', 'Info'],
+      datasets: [{
+        data: [data.CRITICAL||0, data.HIGH||0, data.MEDIUM||0, data.LOW||0, data.INFO||0],
+        backgroundColor: ['#f85149','#d29922','#e3b341','#58a6ff','#8b949e'],
+        borderWidth: 0,
+        hoverOffset: 6,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      cutout: '65%',
+      plugins: {
+        legend: { position: 'bottom', labels: { color: '#8b949e', font: { size: 11 }, padding: 10, boxWidth: 10 } },
+        tooltip: { callbacks: { label: c => ` ${c.label}: ${c.parsed}` } },
+      },
+    },
+  });
+}
+
+function renderRecentUsers(users) {
+  const tbody = document.getElementById('recent-users-tbody');
+  if (!users.length) { tbody.innerHTML = '<tr class="no-data"><td colspan="4">No users yet.</td></tr>'; return; }
+  tbody.innerHTML = users.map(u => `
+    <tr>
+      <td class="text-muted text-sm">#${u.id}</td>
+      <td>
+        <div class="fw6" style="font-size:13px">${esc(u.full_name||'—')}</div>
+        <div class="text-muted text-sm">${esc(u.email)}</div>
+      </td>
+      <td>${u.is_active ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-gray">Disabled</span>'}</td>
+      <td class="text-muted text-sm">${fmtDate(u.created_at)}</td>
+    </tr>`).join('');
+}
+
+function renderRecentScans(scans) {
+  const tbody = document.getElementById('recent-scans-tbody');
+  if (!scans.length) { tbody.innerHTML = '<tr class="no-data"><td colspan="5">No scans yet.</td></tr>'; return; }
+  tbody.innerHTML = scans.map(s => `
+    <tr>
+      <td class="text-muted text-sm">#${s.id}</td>
+      <td class="text-sm">${esc(s.user_email)}</td>
+      <td>${scanStatusBadge(s.status)}</td>
+      <td>${riskBar(s.risk_score)}</td>
+      <td class="text-sm">
+        <span style="color:var(--danger-h)">${s.critical_count}</span> /
+        <span style="color:var(--orange)">${s.high_count}</span>
+      </td>
+    </tr>`).join('');
+}
+
+// ═══════════════════════════════════════════
+// Users Section
+// ═══════════════════════════════════════════
+async function loadUsers(page) {
+  currentUsersPage = Math.max(1, page);
+  const search  = document.getElementById('user-search').value.trim();
+  const filter  = document.getElementById('user-status-filter').value;
+  const showDel = filter === 'deleted';
+  const adminOnly = filter === 'admin';
+
+  let params = new URLSearchParams({ page: currentUsersPage, per_page: 50, show_deleted: showDel });
+  if (search) params.set('search', search);
+
+  document.getElementById('users-tbody').innerHTML =
+    '<tr class="loading-row"><td colspan="10"><span class="spinner"></span>Loading…</td></tr>';
+
+  try {
+    let data = await apiFetch(`/api/admin/users?${params}`);
+    let users = data.users;
+
+    // Client-side filter for admin only / active / disabled
+    if (filter === 'active')   users = users.filter(u => u.is_active && !u.deleted_at);
+    if (filter === 'disabled') users = users.filter(u => !u.is_active);
+    if (filter === 'admin')    users = users.filter(u => u.is_admin);
+
+    totalUsersPages = Math.max(1, Math.ceil(data.total / 50));
+    document.getElementById('users-count').textContent = `${data.total} user${data.total!==1?'s':''}`;
+    document.getElementById('users-page-info').textContent = `Page ${currentUsersPage} of ${totalUsersPages}`;
+    document.getElementById('users-prev').disabled = currentUsersPage <= 1;
+    document.getElementById('users-next').disabled = currentUsersPage >= totalUsersPages;
+
+    renderUsersTable(users);
+  } catch(err) {
+    document.getElementById('users-tbody').innerHTML =
+      `<tr class="loading-row"><td colspan="10" style="color:var(--danger-h)">Error: ${esc(err.message)}</td></tr>`;
+  }
+}
+
+function renderUsersTable(users) {
+  const tbody = document.getElementById('users-tbody');
+  if (!users.length) {
+    tbody.innerHTML = '<tr class="no-data"><td colspan="10">No users found.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = users.map(u => {
+    const isDeleted = !!u.deleted_at;
+    const statusBadge = isDeleted
+      ? '<span class="badge badge-red">Deleted</span>'
+      : u.is_active ? '<span class="badge badge-green">Active</span>'
+                    : '<span class="badge badge-gray">Disabled</span>';
+    const roleBadge = u.is_admin
+      ? '<span class="badge badge-yellow">Admin</span>'
+      : '<span class="badge badge-gray">User</span>';
+
+    let actions = `<button class="btn btn-ghost btn-sm" onclick="showUserDetail(${u.id})">Detail</button>`;
+    if (isDeleted) {
+      actions += `<button class="btn btn-green btn-sm" onclick="patchUser(${u.id},{restore:true})">Restore</button>`;
+      actions += `<button class="btn btn-danger btn-sm" onclick="confirmDelete(${u.id},'${esc(u.email)}')">Hard&nbsp;delete</button>`;
+    } else {
+      actions += u.is_active
+        ? `<button class="btn btn-warn btn-sm" onclick="patchUser(${u.id},{is_active:false})">Disable</button>`
+        : `<button class="btn btn-green btn-sm" onclick="patchUser(${u.id},{is_active:true})">Enable</button>`;
+      actions += u.is_admin
+        ? `<button class="btn btn-warn btn-sm" onclick="patchUser(${u.id},{is_admin:false})">Revoke&nbsp;admin</button>`
+        : `<button class="btn btn-blue btn-sm" onclick="patchUser(${u.id},{is_admin:true})">Make&nbsp;admin</button>`;
+      actions += `<button class="btn btn-danger btn-sm" onclick="confirmDelete(${u.id},'${esc(u.email)}')">Delete</button>`;
+    }
+
+    return `<tr>
+      <td class="text-muted text-sm">${u.id}</td>
+      <td>
+        <div class="fw6">${esc(u.full_name||'—')}</div>
+        <div class="text-muted text-sm">${esc(u.email)}</div>
+      </td>
+      <td>${statusBadge}</td>
+      <td>${roleBadge}</td>
+      <td>${u.aws_connected ? '<span class="badge badge-green">✓</span>' : '<span class="badge badge-gray">—</span>'}</td>
+      <td>${u.totp_enabled  ? '<span class="badge badge-blue">TOTP</span>' : '<span class="badge badge-gray">—</span>'}</td>
+      <td class="text-muted">${u.scan_count}</td>
+      <td class="text-muted text-sm">${fmtDate(u.created_at)}</td>
+      <td style="color:${u.deleted_at?'var(--danger-h)':'var(--muted)'}; font-size:12px">${u.deleted_at?fmtDate(u.deleted_at):'—'}</td>
+      <td><div class="actions">${actions}</div></td>
+    </tr>`;
+  }).join('');
+}
+
+// User detail modal
+let allUsersCache = {};
+async function showUserDetail(id) {
+  try {
+    // Re-fetch fresh user data from the list
+    const data = await apiFetch(`/api/admin/users?search=${id}&show_deleted=true&per_page=200`);
+    const u = data.users.find(u => u.id === id);
+    if (!u) { showToast('User not found', 'error'); return; }
+
+    document.getElementById('ud-title').textContent = `User #${u.id} — ${u.full_name || u.email}`;
+    document.getElementById('ud-grid').innerHTML = `
+      <div class="detail-item"><div class="dk">ID</div><div class="dv">${u.id}</div></div>
+      <div class="detail-item"><div class="dk">Email</div><div class="dv">${esc(u.email)}</div></div>
+      <div class="detail-item"><div class="dk">Full Name</div><div class="dv">${esc(u.full_name||'—')}</div></div>
+      <div class="detail-item"><div class="dk">Is Active</div><div class="dv">${u.is_active ? '✅ Yes' : '❌ No'}</div></div>
+      <div class="detail-item"><div class="dk">Is Admin</div><div class="dv">${u.is_admin ? '⭐ Yes' : 'No'}</div></div>
+      <div class="detail-item"><div class="dk">Email Verified</div><div class="dv">${u.email_verified ? '✅ Yes' : '❌ No'}</div></div>
+      <div class="detail-item"><div class="dk">TOTP 2FA</div><div class="dv">${u.totp_enabled ? '✅ Enabled' : 'Disabled'}</div></div>
+      <div class="detail-item"><div class="dk">AWS Connected</div><div class="dv">${u.aws_connected ? '✅ Yes' : 'No'}</div></div>
+      <div class="detail-sep"></div>
+      <div class="detail-item"><div class="dk">Total Scans</div><div class="dv">${u.scan_count}</div></div>
+      <div class="detail-item"><div class="dk">Failed Logins</div><div class="dv">${u.failed_login_attempts}</div></div>
+      <div class="detail-item"><div class="dk">Locked Until</div><div class="dv">${u.locked_until ? fmtDate(u.locked_until) : '—'}</div></div>
+      <div class="detail-item"><div class="dk">Registered</div><div class="dv">${fmtDateFull(u.created_at)}</div></div>
+      <div class="detail-item"><div class="dk">Deleted At</div><div class="dv" style="color:${u.deleted_at?'var(--danger-h)':'inherit'}">${u.deleted_at ? fmtDateFull(u.deleted_at) : '—'}</div></div>
+    `;
+    openModal('user-detail-modal');
+  } catch(err) { showToast(err.message, 'error'); }
+}
+
+// ═══════════════════════════════════════════
+// User Actions
+// ═══════════════════════════════════════════
+async function patchUser(id, body) {
+  try {
+    await apiFetch(`/api/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+    showToast(`User #${id} updated.`, 'success');
+    loadUsers(currentUsersPage);
+    loadStats();
+  } catch(err) { showToast(err.message, 'error'); }
+}
+
+function confirmDelete(id, email) {
+  pendingDeleteId = id;
+  document.getElementById('delete-modal-body').textContent =
+    `Permanently delete user #${id} (${email})? All their scans, findings, and passkeys will be erased. This cannot be undone.`;
+  document.getElementById('delete-confirm-btn').onclick = doHardDelete;
+  openModal('delete-modal');
+}
+
+async function doHardDelete() {
+  closeModal('delete-modal');
+  try {
+    await apiFetch(`/api/admin/users/${pendingDeleteId}`, { method: 'DELETE' });
+    showToast(`User #${pendingDeleteId} permanently deleted.`, 'success');
+    loadUsers(currentUsersPage);
+    loadStats();
+  } catch(err) { showToast(err.message, 'error'); }
+}
+
+// ═══════════════════════════════════════════
+// Scans Section
+// ═══════════════════════════════════════════
+async function loadScans(page) {
+  currentScansPage = Math.max(1, page);
+  const statusFilter = document.getElementById('scan-status-filter').value;
+  const params = new URLSearchParams({ page: currentScansPage, per_page: 50 });
+  if (statusFilter) params.set('status', statusFilter);
+
+  document.getElementById('scans-tbody').innerHTML =
+    '<tr class="loading-row"><td colspan="11"><span class="spinner"></span>Loading…</td></tr>';
+
+  try {
+    const data = await apiFetch(`/api/admin/scans?${params}`);
+    totalScansPages = Math.max(1, Math.ceil(data.total / 50));
+    document.getElementById('scans-count').textContent = `${data.total} scan${data.total!==1?'s':''}`;
+    document.getElementById('scans-page-info').textContent = `Page ${currentScansPage} of ${totalScansPages}`;
+    document.getElementById('scans-prev').disabled = currentScansPage <= 1;
+    document.getElementById('scans-next').disabled = currentScansPage >= totalScansPages;
+    renderScansTable(data.scans);
+  } catch(err) {
+    document.getElementById('scans-tbody').innerHTML =
+      `<tr class="loading-row"><td colspan="11" style="color:var(--danger-h)">Error: ${esc(err.message)}</td></tr>`;
+  }
+}
+
+function renderScansTable(scans) {
+  const tbody = document.getElementById('scans-tbody');
+  if (!scans.length) { tbody.innerHTML = '<tr class="no-data"><td colspan="11">No scans found.</td></tr>'; return; }
+  tbody.innerHTML = scans.map(s => `
+    <tr>
+      <td class="text-muted text-sm">#${s.id}</td>
+      <td>
+        <div class="fw6 text-sm">${esc(s.user_name||'—')}</div>
+        <div class="text-muted text-sm">${esc(s.user_email)}</div>
+      </td>
+      <td>${scanStatusBadge(s.status)}</td>
+      <td>${riskBar(s.risk_score)}</td>
+      <td style="color:var(--danger-h); font-weight:600">${s.critical_count}</td>
+      <td style="color:var(--orange);   font-weight:600">${s.high_count}</td>
+      <td style="color:var(--warn)">${s.medium_count}</td>
+      <td style="color:var(--blue)">${s.low_count}</td>
+      <td class="text-muted">${s.finding_count}</td>
+      <td class="text-muted text-sm">${fmtDate(s.started_at)}</td>
+      <td class="text-muted text-sm">${s.completed_at ? fmtDate(s.completed_at) : '—'}</td>
+    </tr>`).join('');
+}
+
+// ═══════════════════════════════════════════
+// System Section
+// ═══════════════════════════════════════════
+async function loadSystemStats() {
+  const el = document.getElementById('system-stats-body');
+  try {
+    const s = await apiFetch('/api/admin/stats');
+    el.innerHTML = `
+      <table style="width:100%">
+        <tr><td style="padding:5px 0;color:var(--muted)">Total Users</td><td style="text-align:right;font-weight:600">${s.total_users}</td></tr>
+        <tr><td style="padding:5px 0;color:var(--muted)">Active Users</td><td style="text-align:right;font-weight:600;color:#3fb950">${s.active_users}</td></tr>
+        <tr><td style="padding:5px 0;color:var(--muted)">Soft-Deleted</td><td style="text-align:right;font-weight:600;color:var(--danger-h)">${s.deleted_users}</td></tr>
+        <tr><td style="padding:5px 0;color:var(--muted)">Admin Accounts</td><td style="text-align:right;font-weight:600;color:var(--warn)">${s.admin_users}</td></tr>
+        <tr><td style="padding:5px 0;color:var(--muted)">Locked Accounts</td><td style="text-align:right;font-weight:600">${s.locked_users}</td></tr>
+        <tr><td style="padding:5px 0;color:var(--muted)">AWS Connected</td><td style="text-align:right;font-weight:600;color:var(--blue)">${s.aws_connected}</td></tr>
+        <tr><td style="padding:5px 0;color:var(--muted)">Total Scans</td><td style="text-align:right;font-weight:600">${s.total_scans}</td></tr>
+        <tr><td style="padding:5px 0;color:var(--muted)">Total Findings</td><td style="text-align:right;font-weight:600;color:var(--purple)">${s.total_findings}</td></tr>
+        <tr><td style="padding:5px 0;color:var(--muted)">New This Week</td><td style="text-align:right;font-weight:600;color:#3fb950">${s.new_this_week}</td></tr>
+      </table>`;
+  } catch(err) {
+    el.textContent = 'Failed to load: ' + err.message;
+  }
+}
+
+// ═══════════════════════════════════════════
+// Modals
+// ═══════════════════════════════════════════
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.addEventListener('click', e => {
+  if (e.target.classList.contains('modal-overlay')) {
+    e.target.classList.remove('open');
+  }
+});
+
+// ═══════════════════════════════════════════
+// Helpers
+// ═══════════════════════════════════════════
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' });
+}
+function fmtDateFull(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString(undefined, { dateStyle:'medium', timeStyle:'short' });
+}
+
+function scanStatusBadge(status) {
+  const map = {
+    PENDING:   '<span class="badge badge-gray">Pending</span>',
+    RUNNING:   '<span class="badge badge-blue">Running</span>',
+    COMPLETED: '<span class="badge badge-green">Completed</span>',
+    FAILED:    '<span class="badge badge-red">Failed</span>',
+  };
+  return map[status] || `<span class="badge badge-gray">${esc(status)}</span>`;
+}
+
+function riskBar(score) {
+  if (score == null) return '<span class="text-muted text-sm">—</span>';
+  const pct = Math.min(100, Math.round(score));
+  const color = pct >= 75 ? 'var(--danger-h)' : pct >= 50 ? 'var(--orange)' : pct >= 25 ? 'var(--warn)' : '#3fb950';
+  return `<div class="risk-bar">
+    <div class="risk-bg"><div class="risk-fill" style="width:${pct}%;background:${color}"></div></div>
+    <span class="text-sm" style="color:${color};min-width:28px">${pct}</span>
+  </div>`;
+}
+
+function debounce(key, fn, delay=350) {
+  clearTimeout(debounceTimers[key]);
+  debounceTimers[key] = setTimeout(fn, delay);
+}
+
+let toastTimer;
+function showToast(msg, type='') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = type;
+  el.style.display = 'block';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.style.display = 'none'; }, 3500);
+}
+</script>
+</body>
+</html>
