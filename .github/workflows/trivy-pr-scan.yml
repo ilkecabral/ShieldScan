@@ -1,0 +1,60 @@
+name: Trivy PR Scan
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev]
+
+jobs:
+  trivy-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build image for scanning
+        run: docker build -t shieldscan-app:${{ github.sha }} .
+
+      - name: Run Trivy vulnerability scanner (image)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: shieldscan-app:${{ github.sha }}
+          format: sarif
+          output: trivy-image-results.sarif
+          severity: HIGH,CRITICAL
+          exit-code: 0
+
+      - name: Run Trivy filesystem scan (dependencies)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-fs-results.sarif
+          severity: HIGH,CRITICAL
+          exit-code: 0
+
+      - name: Run Trivy config scan (IaC)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: config
+          scan-ref: ./infra
+          format: sarif
+          output: trivy-config-results.sarif
+          severity: HIGH,CRITICAL
+          exit-code: 0
+
+      - name: Upload SARIF results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: .
+
+      - name: Gate - fail build on CRITICAL CVEs
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: shieldscan-app:${{ github.sha }}
+          format: table
+          severity: CRITICAL
+          exit-code: 1
