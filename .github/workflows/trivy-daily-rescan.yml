@@ -1,0 +1,39 @@
+name: Trivy Daily Rescan
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  rescan-shipped-images:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Pull latest shipped image
+        run: docker pull ${{ secrets.ECR_REGISTRY }}/shieldscan-app:latest
+
+      - name: Rescan for newly disclosed CVEs
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: ${{ secrets.ECR_REGISTRY }}/shieldscan-app:latest
+          format: json
+          output: daily-rescan-results.json
+          severity: HIGH,CRITICAL
+          exit-code: 0
+
+      - name: Post results to ShieldScan findings API
+        run: |
+          curl -X POST "${{ secrets.SHIELDSCAN_API_URL }}/scans/trivy/ingest" \
+            -H "Authorization: Bearer ${{ secrets.SHIELDSCAN_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            --data @daily-rescan-results.json
+
+      - name: Upload scan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-daily-rescan-${{ github.run_id }}
+          path: daily-rescan-results.json
+          retention-days: 30
