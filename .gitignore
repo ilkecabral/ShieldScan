@@ -78,3 +78,8 @@ coreui-free-bootstrap-admin-template-main/
 # ── Backup files ──────────────────────────────────────────────────────────────
 *.bak
 app/frontend/index.html.bak
+
+# ── Screenshots / slide images (not part of the app) ─────────────────────────
+slide-*.jpg
+slide-*.jpeg
+slide-*.png
