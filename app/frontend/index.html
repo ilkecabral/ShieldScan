@@ -208,9 +208,15 @@
   }
   window.onerror = function(msg, src, lineno, colno, error) {
     var detail = error && error.stack ? error.stack : (src ? ('at ' + src + ':' + lineno + ':' + colno) : null);
+    // "Script error." with no source = cross-origin script (Babel blob URL or extension)
+    if (msg === 'Script error.' && !src && !error) {
+      detail = '(Cross-origin or Babel blob URL — open DevTools Console F12 for real stack trace)';
+    }
     _ssShowError(msg, detail);
   };
   window.addEventListener('unhandledrejection', function(e) {
+    // Ignore cancelled fetch requests (AbortError) — these are normal
+    if (e.reason && e.reason.name === 'AbortError') return;
     var msg = (e.reason && e.reason.message) ? e.reason.message : String(e.reason || 'Unhandled Promise rejection');
     var detail = (e.reason && e.reason.stack) ? e.reason.stack : null;
     _ssShowError(msg, detail);
@@ -4607,8 +4613,8 @@ function MainApp({ user, onSignOut, initialView, initialSettingsTab }) {
               {view==="inventory"  && <InventoryPage/>}
               {view==="reports"    && <ReportsPage findings={findings} stats={stats}/>}
               {view==="ai"         && <div style={{height:"calc(100vh - 140px)"}}><AIAssistant/></div>}
-              {view==="settings"   && <SettingsPage user={user} goToView={setView} initialTab={settingsTab} onAwsConnect={()=>setAwsConnected(true)} onAwsDisconnect={()=>setAwsConnected(false)} onSignOut={handleSignOut}/>}
-              {view==="security"   && <SecurityPage onSignOut={handleSignOut}/>}
+              {view==="settings"   && <SettingsPage user={user} goToView={setView} initialTab={settingsTab} onAwsConnect={()=>setAwsConnected(true)} onAwsDisconnect={()=>setAwsConnected(false)} onSignOut={onSignOut}/>}
+              {view==="security"   && <SecurityPage onSignOut={onSignOut}/>}
               {view==="cnappgoat"  && <CNAPPgoatLab/>}
             </div>
           )}
@@ -4732,7 +4738,9 @@ function App() {
   return React.createElement(MainApp, { user, onSignOut: handleSignOut, initialView, initialSettingsTab });
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+ReactDOM.createRoot(document.getElementById("root")).render(
+  React.createElement(ErrorBoundary, null, React.createElement(App))
+);
 </script>
 </body>
 </html>
