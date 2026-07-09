@@ -10,10 +10,12 @@ Flow:
   5. Return response + metadata
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from ..database import get_db
 from .. import models
@@ -22,6 +24,7 @@ from ..ai_service import get_ai_response
 from ..rag_module import retrieve
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
+limiter = Limiter(key_func=get_remote_address)
 
 
 # ─────────────────────────────────────────
@@ -106,7 +109,9 @@ def _get_findings_for_context(
 # ─────────────────────────────────────────
 
 @router.post("/chat", response_model=ChatResponse)
+@limiter.limit("20/hour")   # LLM calls are expensive — 20/hour per IP is generous but bounded
 async def chat(
+    request: Request,
     payload: ChatRequest,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -152,13 +157,23 @@ def ai_status():
     """Check which AI provider is configured and RAG knowledge base size."""
     import os
     from ..rag_module import get_collection_size
+    from ..ai_service import _check_provider_configured
 
     provider = os.getenv("AI_PROVIDER", "ollama")
     kb_size = get_collection_size()
+    config_error = _check_provider_configured()
+
+    if provider == "groq":
+        model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    elif provider == "claude":
+        model = os.getenv("CLAUDE_MODEL", "claude-haiku-4-5-20251001")
+    else:
+        model = os.getenv("OLLAMA_MODEL", "llama3.2")
 
     return {
         "provider": provider,
-        "model": os.getenv("OLLAMA_MODEL" if provider == "ollama" else "GROQ_MODEL", "unknown"),
+        "model": model,
         "knowledge_base_documents": kb_size,
-        "status": "ready",
+        "status": "needs_setup" if config_error else "ready",
+        "setup_required": bool(config_error),
     }

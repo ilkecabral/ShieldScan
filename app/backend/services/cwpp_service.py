@@ -62,7 +62,7 @@ MOCK_FINDINGS = [
 
 # ── Real implementation (Teammate 2 fills this in) ───────────────────────────
 
-USE_MOCK_CWPP = True  # Set to False once real implementation is ready
+USE_MOCK_CWPP = False  # Set to False once real implementation is ready
 
 
 def run_cwpp_scan(image_name: str) -> list[dict]:
@@ -81,30 +81,47 @@ def run_cwpp_scan(image_name: str) -> list[dict]:
     if USE_MOCK_CWPP:
         return MOCK_FINDINGS
 
-    # ── TODO: Teammate 2 implements below ────────────────────────────────────
-    # import subprocess, json
-    #
-    # result = subprocess.run(
-    #     ["trivy", "image", "--format", "json", "--quiet", image_name],
-    #     capture_output=True, text=True
-    # )
-    # trivy_output = json.loads(result.stdout)
-    # findings = []
-    # for result_item in trivy_output.get("Results", []):
-    #     for vuln in result_item.get("Vulnerabilities", []):
-    #         findings.append({
-    #             "finding_id": vuln["VulnerabilityID"],
-    #             "finding_type": "CWPP",
-    #             "severity": vuln["Severity"],
-    #             "title": vuln.get("Title", vuln["VulnerabilityID"]),
-    #             "description": vuln.get("Description", ""),
-    #             "resource": image_name,
-    #             "region": "container",
-    #             "fix_recommendation": f"Update {vuln['PkgName']} to {vuln.get('FixedVersion', 'latest')}",
-    #             "cve_id": vuln["VulnerabilityID"],
-    #             "cvss_score": vuln.get("CVSS", {}).get("nvd", {}).get("V3Score", 0.0),
-    #             "affected_package": f"{vuln['PkgName']}:{vuln['InstalledVersion']}",
-    #             "fixed_version": vuln.get("FixedVersion", "unknown"),
-    #         })
-    # return findings
-    raise NotImplementedError("Real CWPP implementation pending — set USE_MOCK_CWPP = True to use mock data")
+    import subprocess
+    import json
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        logger.info(f"Running Trivy CWPP scan on image: {image_name}")
+        result = subprocess.run(
+            ["trivy", "image", "--format", "json", "--quiet", image_name],
+            capture_output=True,
+            text=True,
+            check=False
+        )
+        
+        if result.returncode != 0 and not result.stdout.strip():
+            logger.error(f"Trivy scan failed: {result.stderr}")
+            raise RuntimeError(f"Trivy scan failed. Is trivy installed? Error: {result.stderr}")
+            
+        trivy_output = json.loads(result.stdout)
+        findings = []
+        for result_item in trivy_output.get("Results", []):
+            for vuln in result_item.get("Vulnerabilities", []):
+                findings.append({
+                    "finding_id": vuln.get("VulnerabilityID", "UNKNOWN"),
+                    "finding_type": "CWPP",
+                    "severity": vuln.get("Severity", "UNKNOWN"),
+                    "title": vuln.get("Title", vuln.get("VulnerabilityID", "Vulnerability found")),
+                    "description": vuln.get("Description", ""),
+                    "resource": image_name,
+                    "region": "container",
+                    "fix_recommendation": f"Update {vuln.get('PkgName', 'package')} to {vuln.get('FixedVersion', 'a newer version')}",
+                    "cve_id": vuln.get("VulnerabilityID", ""),
+                    "cvss_score": vuln.get("CVSS", {}).get("nvd", {}).get("V3Score", 0.0),
+                    "affected_package": f"{vuln.get('PkgName', 'unknown')}:{vuln.get('InstalledVersion', 'unknown')}",
+                    "fixed_version": vuln.get("FixedVersion", "unknown"),
+                })
+        return findings
+    except FileNotFoundError:
+        logger.error("Trivy is not installed or not in PATH.")
+        raise RuntimeError("Trivy is required but not found in PATH.")
+    except json.JSONDecodeError:
+        logger.error(f"Failed to parse Trivy output: {result.stdout}")
+        raise RuntimeError("Invalid JSON returned by Trivy.")

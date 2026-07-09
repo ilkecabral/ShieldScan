@@ -63,3 +63,18 @@ logs/
 # ── Test / coverage ───────────────────────────────────────────────────────────
 .coverage
 htmlcov/
+
+# ── Generated at runtime ──────────────────────────────────────────────────────
+logs/
+*.log
+
+# ── Archived debug scripts (moved to scripts/archive/) ───────────────────────
+scripts/archive/
+
+# ── External references / templates (not deployable) ─────────────────────────
+references/
+coreui-free-bootstrap-admin-template-main/
+
+# ── Backup files ──────────────────────────────────────────────────────────────
+*.bak
+app/frontend/index.html.bak

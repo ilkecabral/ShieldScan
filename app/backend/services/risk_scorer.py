@@ -11,9 +11,9 @@ scan_manager.py calls score_findings() and expects a float 0.0–100.0.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
 
-USE_MOCK_SCORER = True  # Set to False once XGBoost model is ready
+USE_MOCK_SCORER = False  # Changed to False since we are using the heuristic model now
 
-# Severity weights for the mock scorer
+# Severity weights for the heuristic scorer
 _SEVERITY_WEIGHTS = {
     "CRITICAL": 40,
     "HIGH": 20,
@@ -30,7 +30,7 @@ def _mock_score(findings: list[dict]) -> float:
     """
     if not findings:
         return 0.0
-    raw = sum(_SEVERITY_WEIGHTS.get(f.get("severity", "LOW"), 2) for f in findings)
+    raw = sum(_SEVERITY_WEIGHTS.get(str(f.get("severity", "LOW")).upper(), 2) for f in findings)
     return round(min(float(raw), 100.0), 1)
 
 
@@ -40,7 +40,6 @@ def score_findings(findings: list[dict]) -> float:
 
     Args:
         findings: Combined list of CSPM + CWPP finding dicts.
-                  Each dict has at minimum: finding_id, severity, finding_type.
 
     Returns:
         float between 0.0 (no risk) and 100.0 (critical risk).
@@ -48,20 +47,40 @@ def score_findings(findings: list[dict]) -> float:
     if USE_MOCK_SCORER:
         return _mock_score(findings)
 
-    # ── TODO: Teammate 3 implements below ────────────────────────────────────
-    # import xgboost as xgb
-    # import numpy as np
-    #
-    # Feature engineering from findings list:
-    # - critical_count, high_count, medium_count, low_count
-    # - cspm_count, cwpp_count
-    # - max_cvss_score
-    # - has_public_s3, has_open_ssh, has_root_key (bool flags)
-    #
-    # model = xgb.Booster()
-    # model.load_model("services/risk_model.json")
-    # features = _extract_features(findings)
-    # dmatrix = xgb.DMatrix(np.array([features]))
-    # score = float(model.predict(dmatrix)[0])
-    # return round(min(max(score, 0.0), 100.0), 1)
-    raise NotImplementedError("XGBoost scorer pending — set USE_MOCK_SCORER = True to use weighted mock")
+    if not findings:
+        return 0.0
+
+    # ── Heuristic Risk Scorer ────────────────────────────────────────────────
+    # We calculate a dynamic score based on the highest severity present,
+    # the sheer volume of issues, and the average CVSS score.
+    # This replaces the XGBoost model for the school presentation.
+    
+    critical_count = sum(1 for f in findings if str(f.get("severity")).upper() == "CRITICAL")
+    high_count = sum(1 for f in findings if str(f.get("severity")).upper() == "HIGH")
+    medium_count = sum(1 for f in findings if str(f.get("severity")).upper() == "MEDIUM")
+    
+    cvss_scores = [float(f.get("cvss_score", 0)) for f in findings if f.get("cvss_score")]
+    max_cvss = max(cvss_scores) if cvss_scores else 0.0
+
+    base_score = 0.0
+    
+    # Base score determined by the worst vulnerability present
+    if critical_count > 0:
+        base_score = 80.0
+    elif high_count > 0:
+        base_score = 60.0
+    elif medium_count > 0:
+        base_score = 30.0
+    else:
+        base_score = 10.0
+
+    # Additive penalties for sheer volume of issues
+    volume_penalty = (critical_count * 5.0) + (high_count * 2.5) + (medium_count * 0.5)
+    
+    # CVSS modifier: if max CVSS is very high, bump the score further
+    cvss_modifier = (max_cvss * 2.0) if max_cvss > 7.0 else 0.0
+
+    final_score = base_score + volume_penalty + cvss_modifier
+    
+    # Cap at 100.0
+    return round(min(final_score, 100.0), 1)

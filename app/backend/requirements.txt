@@ -1,12 +1,15 @@
 # Web framework
 fastapi==0.111.0
-uvicorn==0.29.0
+uvicorn[standard]==0.29.0
+python-multipart==0.0.9
 
 # Database
 sqlalchemy==2.0.30
+alembic==1.13.1
+psycopg2-binary==2.9.9
 
 # Auth
-passlib[bcrypt]==1.7.4
+bcrypt==4.2.1
 python-jose[cryptography]==3.3.0
 
 # AWS credential encryption
@@ -17,10 +20,31 @@ python-dotenv==1.0.1
 
 # AI / LLM
 ollama==0.3.3
+httpx==0.27.0
 
 # RAG
 chromadb==0.5.0
+numpy<2.0                 # ChromaDB 0.5.0 uses np.float_ removed in NumPy 2.0
 
 # Data validation
 pydantic==2.7.1
 email-validator==2.1.1
+fpdf2==2.7.9
+
+# Rate limiting
+slowapi==0.1.9
+
+# TOTP 2FA
+pyotp==2.9.0
+qrcode[pil]==7.4.2
+Pillow==10.3.0
+
+# Passkey / WebAuthn (FIDO2)
+# Compatible with Touch ID, Face ID, Windows Hello, YubiKeys
+webauthn==2.1.0
+
+# AWS SDK — CSPM scanning and credential validation (sts:GetCallerIdentity)
+boto3==1.34.131
+
+# CloudWatch logging (Phase 4 — AWS production)
+watchtower==3.2.0

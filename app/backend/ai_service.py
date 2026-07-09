@@ -20,18 +20,22 @@ AI_PROVIDER = os.getenv("AI_PROVIDER", "ollama").lower()
 # Shared system prompt — scope-locked to cloud security
 # ─────────────────────────────────────────
 
-SYSTEM_PROMPT_BASE = """You are ShieldScan AI, a cloud security assistant built into the ShieldScan CNAPP platform.
+SYSTEM_PROMPT_BASE = """You are ShieldScan AI, an expert cloud security assistant embedded in the ShieldScan CNAPP platform.
 
-Your ONLY job is to help users understand and fix cloud security findings, misconfigurations, vulnerabilities, and compliance gaps.
+YOUR SOLE PURPOSE is to help users understand, prioritize, and remediate cloud security issues:
+- AWS misconfigurations (IAM, S3, EC2, VPC, RDS, CloudTrail, KMS)
+- Container CVEs detected by Trivy
+- Compliance gaps (CIS AWS Benchmark, NIST 800-53, SOC 2, PCI-DSS)
+- Security best practices for cloud-native infrastructure
+- Analysis of scan findings from the user's connected AWS account
 
-Rules:
-- Answer ONLY questions about cloud security, AWS, containers, CVEs, compliance (CIS, NIST, SOC2), IAM, networking, and infrastructure security.
-- If asked anything unrelated to cloud security or infrastructure, reply: "I can only help with cloud security topics. Please ask me about your findings or security configurations."
-- Always be specific and actionable. Reference the actual finding data provided.
-- Keep answers concise. Lead with the fix, then explain why.
-- For CVEs, always mention the affected package, severity, and fix version if available.
-
-When scan findings are provided in context, prioritize answering based on those specific findings."""
+HARD RESTRICTIONS — you MUST follow these without exception:
+1. SCOPE: Only answer questions related to cloud security, AWS, containers, CVEs, infrastructure security, compliance, and the user's scan findings. Reject everything else.
+2. OFF-TOPIC REFUSAL: If the user asks about anything outside cloud security (coding help, math, recipes, general AI questions, current events, personal advice, etc.), respond ONLY with: "I'm ShieldScan AI — I can only help with cloud security topics. Ask me about your scan findings, AWS misconfigurations, CVEs, or compliance requirements."
+3. NO HALLUCINATION: Only reference CVEs, controls, or services that are explicitly mentioned in the scan findings or knowledge base context provided below. Do not invent finding IDs or CVE numbers.
+4. FINDINGS FIRST: When scan findings are provided, always anchor your answer to those specific findings. Reference finding IDs, resource names, and severities.
+5. ACTIONABLE: Lead every answer with the concrete fix (CLI command or console steps), then explain why it matters.
+6. CONCISE: Keep answers under 300 words unless a step-by-step guide is explicitly requested."""
 
 
 def _build_full_system_prompt(findings_context: str, rag_context: str) -> str:
@@ -64,27 +68,49 @@ def _format_findings_for_context(findings: list[dict]) -> str:
 
 
 # ─────────────────────────────────────────
-# Provider: Ollama (local dev)
+# Provider: Ollama (local — via REST API, no Python SDK needed)
 # ─────────────────────────────────────────
 
 async def _call_ollama(system_prompt: str, user_message: str) -> str:
-    import ollama as ollama_client
+    import httpx
 
     model = os.getenv("OLLAMA_MODEL", "llama3.2")
-    base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
+
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message},
+        ],
+        "stream": False,
+    }
 
     try:
-        client = ollama_client.Client(host=base_url)
-        response = client.chat(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message},
-            ],
+        async with httpx.AsyncClient(timeout=120) as client:
+            response = await client.post(
+                f"{base_url}/api/chat",
+                json=payload,
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data["message"]["content"]
+    except httpx.ConnectError:
+        return (
+            "Ollama is not running. Open a terminal and run:\n\n"
+            "  ollama serve\n\n"
+            "Keep that terminal open, then send your message again."
         )
-        return response.message.content
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            return (
+                f"Model '{model}' is not pulled yet. In a terminal run:\n\n"
+                f"  ollama pull {model}\n\n"
+                f"Then send your message again."
+            )
+        return f"Ollama returned an error ({e.response.status_code}): {e.response.text}"
     except Exception as e:
-        return f"[Ollama error: {e}. Is Ollama running? Run: ollama serve]"
+        return f"Ollama error: {e}"
 
 
 # ─────────────────────────────────────────
@@ -95,7 +121,7 @@ async def _call_ollama(system_prompt: str, user_message: str) -> str:
 async def _call_groq(system_prompt: str, user_message: str) -> str:
     import httpx
 
-    api_key = os.getenv("GROQ_API_KEY")
+    api_key = (os.getenv("GROQ_API_KEY") or "").strip()
     if not api_key:
         return "[Groq error: GROQ_API_KEY not set in .env]"
 
@@ -170,6 +196,39 @@ async def _call_claude(system_prompt: str, user_message: str) -> str:
 # Public interface — called by routers/ai.py
 # ─────────────────────────────────────────
 
+def _check_provider_configured() -> "str | None":
+    """
+    Return a setup-instructions string if the selected provider is not properly
+    configured or not reachable, or None if everything looks good.
+    """
+    provider = AI_PROVIDER
+    if provider == "ollama":
+        # No pre-flight check — the actual call handles connection errors with
+        # clear messages. A blocking 2-second check here slows every request.
+        return None
+    elif provider == "groq":
+        key = os.getenv("GROQ_API_KEY", "").strip()
+        if not key:
+            return (
+                "⚙️ **Groq API key not configured.**\n\n"
+                "Get a free key (takes 60 seconds, no credit card):\n"
+                "1. Go to https://console.groq.com/keys\n"
+                "2. Sign in with GitHub or Google\n"
+                "3. Click **Create API Key** → copy it\n"
+                "4. Open `.env` → set `GROQ_API_KEY=<your-key>`\n"
+                "5. Restart the backend (Ctrl+C → run uvicorn again)\n\n"
+                "Groq is free: 14,400 requests/day, no billing info needed."
+            )
+    elif provider == "claude":
+        key = os.getenv("ANTHROPIC_API_KEY", "")
+        if not key or key.startswith("your_"):
+            return (
+                "⚙️ ANTHROPIC_API_KEY not set in .env. "
+                "Add your key from https://console.anthropic.com and restart the backend."
+            )
+    return None
+
+
 async def get_ai_response(
     user_message: str,
     findings: Optional[list[dict]] = None,
@@ -187,6 +246,11 @@ async def get_ai_response(
     Returns:
         The AI's response as a string
     """
+    # Guard: check provider is properly configured before making any network call
+    config_error = _check_provider_configured()
+    if config_error:
+        return config_error
+
     findings_context = _format_findings_for_context(findings or [])
     system_prompt = _build_full_system_prompt(findings_context, rag_context or "")
 
